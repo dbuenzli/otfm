@@ -1,0 +1,8 @@
+#directory "_build/src";;
+#directory "_build/test";;
+
+#use "topfind"
+#require "gg"
+ 
+#load "otfm.cmo";;
+#install_printer Otfm.Tag.pp;;

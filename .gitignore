@@ -1,0 +1,7 @@
+_build
+tmp
+dist
+_obuild
+\.\#*
+\#*#
+CLOCK.org

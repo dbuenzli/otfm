@@ -1,0 +1,57 @@
+OASISFormat: 0.3
+Name: otfm
+Version: %%VERSION%%
+Synopsis: OpenType font decoder for OCaml
+Authors: Daniel Bünzli <daniel.buenzli at erratique.ch>
+Copyrights: (c) 2013 Daniel C. Bünzli
+License: BSD3
+Homepage: http://erratique.ch/software/otfm
+Description:
+ Otfm is an in-memory decoder for the OpenType font data format. It
+ provides low-level access to tables of OpenType fonts and functions
+ to decode some of them.
+ 
+ Otfm is made of a single module and is distributed under a BSD
+ license.
+
+OCamlVersion: >= 4.00.0
+Plugins: META (0.3)
+BuildTools:ocamlbuild
+
+Library otfm
+ Path: src
+ Modules: Otfm
+ 
+Executable otfdump
+ Path: test
+ MainIs: otfdump.ml
+ CompiledObject: Best
+ BuildDepends: otfm
+ Install: true
+
+Executable test
+ Path: test
+ MainIs: test.ml
+ CompiledObject: Best
+ BuildDepends: otfm
+ Install: false
+
+Document api
+ Title: Otfm's documentation and API reference
+ Type: ocamlbuild (0.3)
+ BuildTools+: ocamldoc
+ XOCamlbuildLibraries: otfm
+ XOCamlbuildPath: doc
+
+Document distribution
+ Title: "Otfm's README and CHANGES files"
+ DataFiles: README CHANGES
+
+Document samples
+ Title: "Otfm's sample code"
+ DataFiles: test/*.ml
+
+SourceRepository head
+ Type: git
+ Location: git://erratique.ch/repos/otfm.git
+ Browser: http://erratique.ch/repos/otfm
