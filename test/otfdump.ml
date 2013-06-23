@@ -6,12 +6,11 @@
 
 let pp = Format.fprintf 
 let exec = Filename.basename Sys.executable_name 
-let log msg = Format.eprintf ("%s: " ^^ msg ^^ "@.") exec 
 let err = ref false
+let log msg = err := true; Format.eprintf ("%s: " ^^ msg ^^ "@.") exec
 let log_err inf e =
-  err := true; Format.eprintf "%s: %s: %a" exec inf Otfm.pp_error e
+  err := true; Format.eprintf "@[<2>%s:%s:@ %a@]@." exec inf Otfm.pp_error e
   
-
 let string_of_file inf =
   try
     let ic = if inf = "-" then stdin else open_in_bin inf in
@@ -34,15 +33,19 @@ let string_of_file inf =
   | Sys_error e -> log "%s" e; None
 
 let dump_cmap ppf inf d =
-  let i = ref 0 in
-  let pp_binding ppf k (u0, u1) gid =
-    incr i;
-    let k = match k with `Glyph -> "glyph" | `Glyph_range -> "glyph-range" in
-    pp ppf "@ (%a %a %s %d)" Otfm.pp_cp u0 Otfm.pp_cp u1 k gid; ppf 
-  in 
-  pp ppf "@,@[<1>(cmap";
-  begin match Otfm.table_cmap d pp_binding ppf with 
-  | `Ok _ -> pp ppf ")@]"; | `Error e -> log_err inf e 
+  let pp_map ppf u gid = pp ppf "@,(%a %d)" Otfm.pp_cp u gid in
+  let pp_binding ppf () k (u0, u1) gid = match k with 
+  | `Glyph -> for u = u0 to u1 do pp_map ppf u gid done
+  | `Glyph_range -> for i = 0 to (u1 - u0) do pp_map ppf (u0 + i) (gid + i)done 
+  in
+(*  let nop () _ _ _ = () in *)
+  pp ppf "@,@[<v1>(cmap";
+  begin match Otfm.table_cmap d (pp_binding ppf) ()  with 
+  | `Ok ((pid, eid, fmt), _) -> 
+      pp ppf ")@]"; 
+      pp ppf "@,@[<1>(cmap-source@ (platform-id %d)@ (encoding-id %d)\
+              @ (format %d))@]" pid eid fmt
+  | `Error e -> log_err inf e 
   end
    
 let dump_tables ppf inf d =
@@ -64,10 +67,8 @@ let dump_file ppf inf = match string_of_file inf with
             pp ppf "@,@[<1>(tables ";
             List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts; 
             pp ppf ")@]";
-            dump_tables ppf inf d
-(*
+            dump_tables ppf inf d;
             pp ppf ")@]@."
-*)
 
 let dump files = match files with
 | [] -> dump_file Format.std_formatter "-" 

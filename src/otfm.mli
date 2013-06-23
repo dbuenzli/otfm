@@ -184,13 +184,12 @@ type error_ctx =
 type error = [ 
   | `Unknown_flavour of tag 
   | `Unsupported_TTC
-  | `Unsupported_cmaps of (int * int) list
+  | `Unsupported_cmaps of (int * int * int) list
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
-  | `Unexpected_cmap_format of int
   | `Unexpected_eoi of error_ctx ]
 (** The type for decoding errors. *)
 
@@ -248,20 +247,21 @@ type map_kind = [ `Glyph | `Glyph_range ]
        and [u1] to [gid + (u1 - u0)]}} *)
 
 val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) -> 
-  'a -> [ `Ok of 'a | `Error of error ]
+  'a -> [ `Ok of (int * int * int) * 'a | `Error of error ]
 (** [table_cmap d f acc] folds over a mapping from unicode
     scalar values to glyph ids by reading the {!Tag.t_cmap} 
-    table. 
+    table. The triple of integer indicates the platform id, encoding
+    id and format of the cmap used.
         
-    {b Limitations.} The following cmap tables are supported.
-    If multiple tables are present, tables higher in the list below
-    are favored.
-    {ul
-    {- platform id 0, encoding id 6, format 13 (Last resort font)} 
-    {- platform id 3, encoding id 10, format 12 (UCS-4)}
-    {- platform id 3, encoding id 1, format 4 (UCS-2)}}
+    {b Limitations.} Only the format 13 (last resort font), format 12
+    (UCS-4) and format 4 (UCS-2) cmap table formats are supported.
+
+    If multiple tables are present, it favours 13 over 12 over 4.  If
+    multiple tables of the same format are present it takes the first
+    one it finds. 
+
     If no supported cmap table is found the error [`Unsupported_cmaps]
-    is returned with the list of paltform id, encoding id tuples
+    is returned with the list of platform id, encoding id, format
     available in the font. *)
 
 (** {1:limitations Limitations} 

@@ -135,13 +135,12 @@ type error_ctx =
 type error = [ 
   | `Unknown_flavour of tag 
   | `Unsupported_TTC
-  | `Unsupported_cmaps of (int * int) list
+  | `Unsupported_cmaps of (int * int * int) list
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
-  | `Unexpected_cmap_format of int
   | `Unexpected_eoi of error_ctx ]
 
 let pp_ctx ppf = function 
@@ -162,7 +161,7 @@ let pp_error ppf = function
     pp ppf "@[True@ Type@ collections (TTC)@ are@ not@ supported@]"
 | `Unsupported_cmaps maps -> 
     let pp_sep ppf () = pp ppf ",@ " in 
-    let pp_map ppf (pid, eid) = pp ppf "(%d,%d)" pid eid in
+    let pp_map ppf (pid, eid, fmt) = pp ppf "(%d,%d,%d)" pid eid fmt in
     pp ppf "@[All@ cmaps:@ %a@ are@ unsupported@]" (pp_list ~pp_sep pp_map) maps
 | `Unknown_version (ctx, v) -> 
     pp ppf "@[Unknown@ version (%lX)@ in@ %a@]" v pp_ctx ctx 
@@ -172,8 +171,6 @@ let pp_error ppf = function
     pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
 | `Invalid_cp_range (u0, u1) -> 
     pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
-| `Unexpected_cmap_format f ->
-    pp ppf "@[Unexpected@ cmap@ format (%d)@]" f
 | `Unexpected_eoi ctx -> 
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx;
 
@@ -343,10 +340,10 @@ let rec d_array d el count i a =
   if i = count then `Ok a else
   el d >>= fun v -> a.(i) <- v; d_array d el count (i + 1) a
 
-let d_cmap_4_ranges d f acc u0s u1s delta offset count =           (* ugly. *)
+let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
   let garray_pos = cur_pos d in
   let rec loop acc i = 
-    if i = count then `Ok acc else
+    if i = count then `Ok (cmap, acc) else
     let i' = i + 1 in
     let offset = offset.(i) in
     let delta = delta.(i) in 
@@ -383,10 +380,8 @@ let d_cmap_4_ranges d f acc u0s u1s delta offset count =           (* ugly. *)
   in
   loop acc 0
 
-let d_cmap_4 d f acc () =
-  d_uint16 d >>= fun fmt -> 
-  if fmt <> 4 then err (`Unexpected_cmap_format fmt) else
-  d_skip d (2 * 2) >>= fun () ->
+let d_cmap_4 cmap d f acc () =
+  d_skip d (3 * 2) >>= fun () ->
   d_uint16 d >>= fun count2 -> 
   let count = count2 / 2 in
   d_skip d (3 * 2) >>= fun () ->
@@ -395,55 +390,60 @@ let d_cmap_4 d f acc () =
   d_array d d_uint16 count 0 (Array.make count 0) >>= fun u0s ->
   d_array d d_int16 count 0 (Array.make count 0) >>= fun delta -> 
   d_array d d_uint16 count 0 (Array.make count 0) >>= fun offset ->
-  d_cmap_4_ranges d f acc u0s u1s delta offset count
+  d_cmap_4_ranges cmap d f acc u0s u1s delta offset count
 
-
-let rec d_cmap_groups d count f kind acc =
-  if count = 0 then `Ok acc else
+let rec d_cmap_groups cmap d count f kind acc =
+  if count = 0 then `Ok (cmap, acc) else
   d_uint32_int d >>= fun u0 -> 
   if not (is_cp u0) then err (`Invalid_cp u0) else 
   d_uint32_int d >>= fun u1 -> 
   if not (is_cp u1) then err (`Invalid_cp u1) else 
   if u0 > u1 then err (`Invalid_cp_range (u0, u1)) else
   d_uint32_int d >>= fun gid -> 
-  d_cmap_groups d (count - 1) f kind (f acc kind (u0, u1) gid)
+  d_cmap_groups cmap d (count - 1) f kind (f acc kind (u0, u1) gid)
 
-let d_cmap_seg fmt kind d f acc () = 
-  d_uint16 d >>= fun fmt' -> 
-  if fmt' <> fmt then err (`Unexpected_cmap_format fmt') else
-  d_skip d (2 + 2 * 4) >>= fun () ->
+let d_cmap_seg cmap kind d f acc () = 
+  d_skip d (2 * 2 + 2 * 4) >>= fun () ->
   d_uint32_int d >>= fun count ->
-  d_cmap_groups d count f kind acc
+  d_cmap_groups cmap d count f kind acc
 
-let d_cmap_12 d f acc () = d_cmap_seg 12 `Glyph_range d f acc ()
-let d_cmap_13 d f acc () = d_cmap_seg 13 `Glyph d f acc ()
+let d_cmap_12 cmap d f acc () = d_cmap_seg cmap `Glyph_range d f acc ()
+let d_cmap_13 cmap d f acc () = d_cmap_seg cmap `Glyph d f acc ()
 
-let rec d_cmap_records d count enc acc = 
-  if count = 0 then match enc with 
-  | `None -> err (`Unsupported_cmaps acc)
-  | enc -> `Ok enc
-  else
+let rec d_cmap_records d count acc = 
+  if count = 0 then `Ok acc else
   d_uint16 d >>= fun pid ->
   d_uint16 d >>= fun eid -> 
   d_uint32_int d >>= fun pos -> 
-  match pid, eid with      (* N.B. records are ordered by (pid,eid) in file *)
-  | 0, 6 -> `Ok (`F13 pos) 
-  | 3, 10 -> `Ok (`F12 pos) 
-  | 3,  1 -> d_cmap_records d (count - 1) (`F4 pos) acc
-  | 0, 3 -> `Ok (`F4 pos)
-  | p -> d_cmap_records d (count - 1) enc (p :: acc)
+  let cur = cur_pos d in
+  seek_table_pos d pos >>= fun () ->
+  d_uint16 d >>= fun fmt -> 
+  seek_pos d cur >>= fun () ->
+  d_cmap_records d (count - 1) ((pos, pid, eid, fmt) :: acc)
+
+let select_cmap cmaps = 
+  let rec loop f sel = function 
+  | (_, _, _, (4 | 12 | 13 as f') as c) :: cs when f' > f -> loop f (Some c) cs
+  | [] -> sel
+  | _ :: cs -> loop f sel cs
+  in
+  loop min_int None cmaps
 
 let table_cmap d f acc = 
   init_decoder d >>= seek_required_table d Tag.t_cmap >>= fun () ->
   d_uint16 d >>= fun version ->                           (* cmap header. *)
   if version <> 0 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun count ->                               (* numTables. *)
-  d_cmap_records d count `None [] >>= fun enc -> 
-  match enc with
-  | `F4  pos -> seek_table_pos d pos >>= d_cmap_4  d f acc
-  | `F12 pos -> seek_table_pos d pos >>= d_cmap_12 d f acc
-  | `F13 pos -> seek_table_pos d pos >>= d_cmap_13 d f acc
-  | `None -> assert false
+  d_cmap_records d count [] >>= fun cmaps -> 
+  match select_cmap cmaps with 
+  | None -> 
+      let drop_pos (_, pid, eid, fmt) = (pid, eid, fmt) in
+      err (`Unsupported_cmaps (List.map drop_pos cmaps))
+  | Some (pos, pid, eid, fmt) -> 
+      let cmap = match fmt with 
+      | 4 -> d_cmap_4 | 12 -> d_cmap_12 | 13 -> d_cmap_13 | _ -> assert false
+      in
+      seek_table_pos d pos >>= cmap (pid, eid, fmt) d f acc
    
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
