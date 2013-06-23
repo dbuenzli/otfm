@@ -140,14 +140,59 @@ module Tag : sig
   (** [pp t] prints a textual representation of [t] on [ppf]. *)
 end
 
+(** {1 Unicode code points} 
+
+    For some reason OpenType allows the (textually meaningless)
+    {{:http://unicode.org/glossary/#surrogate_code_point}surrogate
+    code points} to be mapped to glyphs. Hence we deal with Unicode
+    {{:http://unicode.org/glossary/#code_point}code points} not
+    {{:http://unicode.org/glossary/#unicode_scalar_value} scalar
+    value}. *)
+
+type cp = int 
+(** The type for Unicode 
+    {{:http://unicode.org/glossary/#code_point}code points}, ranges
+    from [0x0000] to [0x10_FFFF]. Any code point returned by 
+    [Otfm] is guaranteed to be in the range. *)
+
+type cp_range = cp * cp
+(** The type for Unicode code point ranges. Any range [(u0, u1)] 
+    returned by [Otfm] has [u0 <= u1]. *)
+
+val is_cp : int -> bool
+(** [is_cp i] is [true] if [i] is an 
+    Unicode {{:http://unicode.org/glossary/#code_point}code point}. *)
+
+val is_scalar_value : int -> bool
+(** [is_scalar_value i] is [true] if [i] is an Unicode
+    {{:http://unicode.org/glossary/#unicode_scalar_value} scalar
+    value}. *)
+
+val pp_cp : Format.formatter -> int -> unit
+(** [pp_cp ppf i] prints a textual representation of the
+    {{:http://unicode.org/glossary/#code_point}code point} [i] on
+    [ppf]. If [i] is not a valid code point ["U+Invalid(X)"] is
+    printed where [X] is the hexadecimal integer value. *)
+
 (** {1 Decode} *)
+
+type error_ctx = 
+  [ `Table of tag | `Offset_table | `Table_directory | `Encoding_record 
+  | `Cmap_subtable ]
+(** The type for error contexts. *)
 
 type error = [ 
   | `Unknown_flavour of tag 
-  | `TTC_unsupported
+  | `Unsupported_TTC
+  | `Unsupported_cmaps of (int * int) list
   | `Missing_required_table of tag
-  | `Invalid_table_bounds of (tag * int * int)
-  | `Unexpected_eoi of [ `Offset_table | `Table_directory | `Table of tag ]]
+  | `Unknown_version of error_ctx * int32
+  | `Invalid_bounds of error_ctx * int * int
+  | `Invalid_offset of error_ctx * int
+  | `Invalid_cp of int
+  | `Invalid_cp_range of int * int
+  | `Unexpected_cmap_format of int
+  | `Unexpected_eoi of error_ctx ]
 (** The type for decoding errors. *)
 
 val pp_error : Format.formatter -> [< error] -> unit 
@@ -169,7 +214,8 @@ val decoder_src : decoder -> src
 
     These functions can be used in any order and are robust: when
     they return an error the decoder is back to a consistant state and
-    can be used further. *)
+    can be used further. However if {!flavour} or {!table_list} returns
+    an error you can safely assume that all other functions will. *)
 
 type flavour = [ `TTF | `CFF ]
 (** The type for OpenType flavours. *)
@@ -187,20 +233,54 @@ val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
+(** {2 cmap table} *)
+
+type glyph_id = int
+(** The type for glyph ids. *)
+
+type map_kind = [ `Glyph | `Glyph_range ]
+(** The type for map kinds. 
+
+    Determines how an unicode range [(u0, u1)] and a glyph id [gid]
+    must be interpreted. 
+    {ul 
+    {- [`Glyph] all characters in the range map to to [gid].}
+    {- [`Glyph_range], [u0] maps to [gid], [u0 + 1] to [gid + 1], ... 
+       and [u1] to [gid + (u1 - u0)]}} *)
+
+val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) -> 
+  'a -> [ `Ok of 'a | `Error of error ]
+(** [table_cmap d f acc] folds over a mapping from unicode
+    scalar values to glyph ids by reading the {!Tag.t_cmap} 
+    table. 
+        
+    {b Limitations.} The following cmap tables are supported.
+    If multiple tables are present, tables higher in the list below
+    are favored.
+    {ul
+    {- platform id 0, encoding id 6, format 13 (Last resort font)} 
+    {- platform id 3, encoding id 10, format 12 (UCS-4)}
+    {- platform id 3, encoding id 1, format 4 (UCS-2)}}
+    If no supported cmap table is found the error [`Unsupported_cmaps]
+    is returned with the list of paltform id, encoding id tuples
+    available in the font. *)
+
 (** {1:limitations Limitations} 
 
     As it stands [Otfm] has the following limitations.  Some of these
     may be lifted in the future and a few of these can be overcome 
     by pre-processing your font (e.g. extract [.ttc] files to [.ttf], or 
-    removing hinting information to reduce the font size).
+    removing hinting information to reduce the font size). See also 
+    the individual table decoding functions for other limitations.
 
     {ul
+    {- True Type collections ([.ttc] files) and CFF fonts are not supported.}
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font 
-       files tend to be smaller than 16Mo).}
+       files tend to be smaller than 16 Mo).}
     {- Table checksums are neither computed nor verified. Corrupted 
-       fonts maybe read, but will likely result in errors.}
-    {- True Type collections ([.ttc] files) and CFF fonts are not supported.}}
+       fonts maybe read, but will likely result in errors.}}
+    
 *)
 
 (** {1:examples Examples} *)

@@ -6,72 +6,93 @@
 
 let pp = Format.fprintf 
 let exec = Filename.basename Sys.executable_name 
-let log msg = Format.eprintf ("%s: " ^^ msg ^^ "@?") exec 
+let log msg = Format.eprintf ("%s: " ^^ msg ^^ "@.") exec 
+let err = ref false
+let log_err inf e =
+  err := true; Format.eprintf "%s: %s: %a" exec inf Otfm.pp_error e
+  
 
-let string_of_channel ic = 
-  let buf_size = 65536 in
-  let b = Buffer.create buf_size in 
-  let s = String.create buf_size in 
+let string_of_file inf =
   try
-    while true do
-      let c = input ic s 0 buf_size in 
-      if c = 0 then raise Exit else
-      Buffer.add_substring b s 0 c
-    done;
-    assert false
-  with
-  | Exit -> `Ok (Buffer.contents b)
-  | Failure _ -> `Error
-        
-let dump_flavor inf ppf d = match Otfm.flavour d with 
-| `Error e -> log "%s: %a@." inf Otfm.pp_error e; false
-| `Ok f ->
-    let fs = match f with `TTF -> "TTF" | `CFF -> "CFF" in
-    pp ppf "(flavor %s)@." fs; true
-
-let dump_table_list inf ppf d = match Otfm.table_list d with 
-| `Error e -> log "%s: %a@." inf Otfm.pp_error e; false
-| `Ok ts -> 
-    pp ppf "@[<1>(tables ";
-    List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts; 
-    pp ppf ")@]"; true
-
-let dump inf ppf = 
-  try 
     let ic = if inf = "-" then stdin else open_in_bin inf in
-    begin match string_of_channel ic with 
-    | `Error -> log "%s: max buffer size exceeded (32 bit plaform ?)" inf
-    | `Ok s -> 
-        let d = Otfm.decoder (`String s) in
-        ignore begin 
-          dump_flavor inf ppf d && dump_table_list inf ppf d 
-        end
-    end;
-    close_in ic
+    let close ic = if inf <> "-" then close_in ic else () in
+    let buf_size = 65536 in
+    let b = Buffer.create buf_size in 
+    let s = String.create buf_size in 
+    try
+      while true do
+        let c = input ic s 0 buf_size in 
+        if c = 0 then raise Exit else
+        Buffer.add_substring b s 0 c
+      done;
+      assert false
+    with
+    | Exit -> close ic; Some (Buffer.contents b)
+    | Failure _ -> close ic; log "%s: input file too large" inf; None
+    | Sys_error e -> close ic; log "%s" e; None
   with
-  | Sys_error e -> log "%s@." e
+  | Sys_error e -> log "%s" e; None
+
+let dump_cmap ppf inf d =
+  let i = ref 0 in
+  let pp_binding ppf k (u0, u1) gid =
+    incr i;
+    let k = match k with `Glyph -> "glyph" | `Glyph_range -> "glyph-range" in
+    pp ppf "@ (%a %a %s %d)" Otfm.pp_cp u0 Otfm.pp_cp u1 k gid; ppf 
+  in 
+  pp ppf "@,@[<1>(cmap";
+  begin match Otfm.table_cmap d pp_binding ppf with 
+  | `Ok _ -> pp ppf ")@]"; | `Error e -> log_err inf e 
+  end
+   
+let dump_tables ppf inf d =
+  dump_cmap ppf inf d
+ 
+let dump_file ppf inf = match string_of_file inf with
+| None -> () 
+| Some s -> 
+    let d = Otfm.decoder (`String s) in 
+    match Otfm.flavour d with 
+    | `Error e -> log_err inf e 
+    | `Ok f -> 
+        pp ppf "@[<v1>(@[<1>(file %S)@]" inf;
+        let fs = match f with `TTF -> "TTF" | `CFF -> "CFF" in
+        pp ppf "@,@[<1>(flavor %s)@]" fs;
+        match Otfm.table_list d with 
+        | `Error e -> log_err inf e
+        | `Ok ts ->
+            pp ppf "@,@[<1>(tables ";
+            List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts; 
+            pp ppf ")@]";
+            dump_tables ppf inf d
+(*
+            pp ppf ")@]@."
+*)
+
+let dump files = match files with
+| [] -> dump_file Format.std_formatter "-" 
+| fs -> List.iter (dump_file Format.std_formatter) fs
 
 let main () = 
   let usage = Printf.sprintf 
-    "Usage: %s [OPTION]... [INFILE]\n\
+    "Usage: %s [OPTION]... [OTFFILE]...\n\
     \ Dump OpenType file font information on stdout.\n\
     Options:" exec 
   in
   let cmd = ref `Dump in 
   let set_cmd v () = cmd := v in 
-  let inf = ref "-" in 
-  let set_inf f = 
-    if !inf <> "-" then raise (Arg.Bad "only one file can be specified") else
-    inf := f
-  in
+  let files = ref [] in 
+  let add_file f = files := f :: !files in
   let options = [
     "-ocaml", Arg.Unit (set_cmd `OCaml), " Outputs an OCaml module";
   ]
   in
-  Arg.parse (Arg.align options) set_inf usage; 
-  match !cmd with 
-  | `Dump -> dump !inf Format.std_formatter 
+  Arg.parse (Arg.align options) add_file usage; 
+  begin match !cmd with 
+  | `Dump -> dump (List.rev !files)
   | `OCaml -> failwith "TODO"
+  end; 
+  if !err then exit 1 else exit 0 
 
 let () = main ()
 
