@@ -177,8 +177,8 @@ val pp_cp : Format.formatter -> int -> unit
 (** {1 Decode} *)
 
 type error_ctx = 
-  [ `Table of tag | `Offset_table | `Table_directory | `Encoding_record 
-  | `Cmap_subtable ]
+  [ `Table of tag | `Offset_table | `Table_directory (* | `Encoding_record 
+  | `Cmap_subtable ] *) ]
 (** The type for error contexts. *)
 
 type error = [ 
@@ -187,7 +187,6 @@ type error = [
   | `Unsupported_cmaps of (int * int) list
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
-  | `Invalid_bounds of error_ctx * int * int
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
@@ -274,13 +273,12 @@ val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
     the individual table decoding functions for other limitations.
 
     {ul
-    {- True Type collections ([.ttc] files) and CFF fonts are not supported.}
+    {- True Type collections ([.ttc] files) are not supported} 
+    {- No support CFF fonts tables are not supported.}
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font 
        files tend to be smaller than 16 Mo).}
-    {- Table checksums are neither computed nor verified. Corrupted 
-       fonts maybe read, but will likely result in errors.}}
-    
+    {- Table checksums are not verified.}}
 *)
 
 (** {1:examples Examples} *)

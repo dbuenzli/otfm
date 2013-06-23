@@ -8,12 +8,15 @@
 
 let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s
 
-(* Unsafe string byte manipulations. If you don't believe the author's
-   invariants, replacing with safe versions makes everything safe in
-   the module. He won't be upset. *)
+(* Unsafe string byte manipulations.
 
-let unsafe_chr = Char.unsafe_chr
+   If you don't believe the author's invariants, replacing with safe
+   versions makes everything safe in the module. He won't be
+   upset. *)
+
 let unsafe_byte s j = Char.code (String.get s j)
+
+(* Pretty printers *)
 
 let pp = Format.fprintf 
 let pp_string = Format.pp_print_string
@@ -48,7 +51,7 @@ module Tag = struct
   let t_name = 0x6E616D65l
   let t_OS_2 = 0x4F532F32l
   let t_post = 0x706F7374l
-    
+
   let t_common =
     [ t_cmap; t_head; t_hhea; t_hmtx; t_maxp; t_name; t_OS_2; t_post ]
 
@@ -61,18 +64,18 @@ module Tag = struct
   let t_prep = 0x70726570l
 
   (* CFF font table tags *) 
-    
+
   let t_CFF  = 0x43464620l
   let t_VORG = 0x564F5247l
-    
+
   (* Bitmap glyph tables *)
-    
+
   let t_EBDT = 0x45424454l
   let t_EBLC = 0x45424C43l
   let t_EBSC = 0x45425343l
-    
+
   (* Optional tables. *)
-    
+
   let t_DSIG = 0x44534947l
   let t_gasp = 0x67617370l
   let t_hdmx = 0x68646D78l
@@ -115,10 +118,10 @@ end
 
 type cp = int 
 type cp_range = cp * cp
+let is_cp i = 0x0000 <= i && i <= 0x10FFFF
 let is_scalar_value i = 
   (0x0000 <= i && i <= 0xD7FF) || (0xE000 <= i && i <= 0x10FFFF)
-
-let is_cp i = 0x0000 <= i && i <= 0x10FFFF
+  
 let pp_cp ppf cp =
   if cp < 0 || cp > 0x10FFFF then pp ppf "U+Invalid(%X)" cp else
   if cp <= 0xFFFF then pp ppf "U+%04X" cp else 
@@ -127,16 +130,14 @@ let pp_cp ppf cp =
 (* Decode *)
 
 type error_ctx = 
-  [ `Table of tag | `Offset_table | `Table_directory | `Encoding_record 
-  | `Cmap_subtable ]
-
+  [ `Table of tag | `Offset_table | `Table_directory ]
+  
 type error = [ 
   | `Unknown_flavour of tag 
   | `Unsupported_TTC
   | `Unsupported_cmaps of (int * int) list
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
-  | `Invalid_bounds of error_ctx * int * int
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
@@ -147,61 +148,60 @@ let pp_ctx ppf = function
 | `Table tag -> pp ppf "table %a" Tag.pp tag
 | `Offset_table -> pp ppf "offset table"
 | `Table_directory -> pp ppf "table directory"
-| `Encoding_record -> pp ppf "encoding record"
-| `Cmap_subtable -> pp ppf "cmap subtable"
+(*
+ | `Encoding_record -> pp ppf "encoding record"
+ | `Cmap_subtable -> pp ppf "cmap subtable"
+*)
 
-                  
 let pp_error ppf = function 
 | `Unknown_flavour tag -> 
-    pp ppf "@[Unknown OpenType flavour (%a)@]" Tag.pp tag
+    pp ppf "@[Unknown@ OpenType@ flavour (%a)@]" Tag.pp tag
 | `Missing_required_table tag -> 
-    pp ppf "@[Missing required table (%a)@]" Tag.pp tag
+     pp ppf "@[Missing@ required@ table (%a)@]" Tag.pp tag
 | `Unsupported_TTC ->
-    pp ppf "@[True Type collections (TTC) are not supported@]"
+    pp ppf "@[True@ Type@ collections (TTC)@ are@ not@ supported@]"
 | `Unsupported_cmaps maps -> 
     let pp_sep ppf () = pp ppf ",@ " in 
     let pp_map ppf (pid, eid) = pp ppf "(%d,%d)" pid eid in
-    pp ppf "@[All cmaps: %a are unsupported@]" (pp_list ~pp_sep pp_map) maps
+    pp ppf "@[All@ cmaps:@ %a@ are@ unsupported@]" (pp_list ~pp_sep pp_map) maps
 | `Unknown_version (ctx, v) -> 
-    pp ppf "@[Unknown version (%lX) in %a@]" v pp_ctx ctx 
-| `Invalid_bounds (ctx, o, l) -> 
-    pp ppf "@[Invalid offset/length bounds (%d/%d) in %a@]" o l pp_ctx ctx
+    pp ppf "@[Unknown@ version (%lX)@ in@ %a@]" v pp_ctx ctx 
 | `Invalid_offset (ctx, o) -> 
-    pp ppf "@[Invalid offset (%d) in %a@]" o pp_ctx ctx
+    pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
 | `Invalid_cp u -> 
-    pp ppf "@[Invalid Unicode code point (%a)@]" pp_cp u
+    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
 | `Invalid_cp_range (u0, u1) -> 
-    pp ppf "@[Invalid Unicode code point range (%a, %a)@]" pp_cp u0 pp_cp u1
+    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
 | `Unexpected_cmap_format f ->
-    pp ppf "@[Unexpected cmap format (%d)@]" f
+    pp ppf "@[Unexpected@ cmap@ format (%d)@]" f
 | `Unexpected_eoi ctx -> 
-    pp ppf "@[Unexpected end of input in %a@]" pp_ctx ctx;
+    pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx;
 
-(* N.B. Offsets and lengths are decoded as OCaml ints. On 64 
-   bits platforms they fit, on 32 bits we are limited by 
-   string size anyway. *)
+(* N.B. Offsets and lengths are decoded as OCaml ints. On 64 bits
+   platforms they fit, on 32 bits we are limited by string size
+   anyway. *)
 
 type flavour = [ `TTF | `CFF ]
 type src = [ `String of string ] 
 type decoder =
   { mutable i : string;                                       (* input data. *)
-    mutable i_pos : int;                          (* input current position. *) 
+    mutable i_pos : int;                          (* input current position. *)
     mutable i_max : int;                          (* input maximal position. *)
-    mutable t_off : int;                   (* current table decoding offset. *)
+    mutable t_pos : int;                  (* current decoded table position. *)
     mutable state : [ `Fatal of error | `Start | `Ready ]; (* decoder state. *)
     mutable ctx : error_ctx;                   (* the current error context. *)
     mutable flavour : [ `TTF | `CFF ];                   (* decoded flavour. *)
     mutable tables : (tag * int * int) list }      (* decoded table records. *)
-
+  
 let decoder_src d = (`String d.i)
 let decoder src = 
   let i , i_pos, i_max = match src with
   | `String s -> s, 0, String.length s - 1 
   in 
-  { i; i_pos; i_max; t_off = 0; 
+  { i; i_pos; i_max; t_pos = 0; 
     state = `Start; ctx = `Offset_table; flavour = `TTF; 
     tables = []; }
-
+  
 let ( >>= ) x f = match x with `Ok v -> f v | `Error _ as e -> e
 let err e = `Error e
 let err_eoi d = `Error (`Unexpected_eoi d.ctx)
@@ -212,33 +212,34 @@ let miss d count = d.i_max - d.i_pos + 1 < count
 let raw_byte d =
   let j = d.i_pos in
   d.i_pos <- d.i_pos + 1; (unsafe_byte d.i j) 
-
-let seek_offset ?ctx d off =
-  if off > d.i_max then err (`Invalid_offset (d.ctx, off)) else 
-  begin 
-    (match ctx with None -> () | Some ctx -> set_ctx d ctx); 
-    d.i_pos <- off; `Ok ()
-  end
-
-let seek_table_offset ?ctx d off = seek_offset ?ctx d (d.t_off + off)
+  
+let cur_pos d = d.i_pos
+let seek_pos d pos =
+  if pos > d.i_max then err (`Invalid_offset (d.ctx, pos)) else 
+  (d.i_pos <- pos; `Ok ())
+  
+let seek_table_pos d pos = seek_pos d (d.t_pos + pos)
 let seek_table d tag () = 
   try
-    let _, off, len = List.find (fun (t, _, _) -> tag = t) d.tables in
-    if off > d.i_max || off + len - 1 > d.i_max
-    then err (`Invalid_bounds (`Table tag, off, len)) 
-    else (set_ctx d (`Table tag); d.t_off <- off; d.i_pos <- off;`Ok (Some len))
+    let _, pos, len = List.find (fun (t, _, _) -> tag = t) d.tables in
+    if pos > d.i_max then err (`Invalid_offset (`Table tag, pos)) else
+    (set_ctx d (`Table tag); d.t_pos <- pos; d.i_pos <- pos; `Ok (Some len))
   with Not_found -> `Ok None
-
+  
 let seek_required_table d tag () = match seek_table d tag () with 
 | `Ok (Some _) -> `Ok ()
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
 
+let d_skip d n = 
+  if miss d n then err_eoi d else 
+  (d.i_pos <- d.i_pos + n; `Ok ())
+  
 let d_uint8 d = if miss d 1 then err_eoi d else `Ok (raw_byte d)
 let d_int8 d = match d_uint8 d with
 | `Ok i -> `Ok (if i > 0x7F then i - 0x100 else i)
 | `Error _ as e -> e
-
+  
 let d_uint16 d =
   if miss d 2 then err_eoi d else
   let b0 = raw_byte d in
@@ -258,38 +259,32 @@ let d_uint24 d =
 
 let d_uint32 d = 
   if miss d 4 then err_eoi d else
-  let b0 = raw_byte d in
-  let b1 = raw_byte d in 
-  let b2 = raw_byte d in 
-  let b3 = raw_byte d in
+  let b0 = raw_byte d in let b1 = raw_byte d in 
+  let b2 = raw_byte d in let b3 = raw_byte d in
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (Int32.logor (Int32.shift_left s0 16) s1)
 
 let d_uint32_int d =
   if miss d 4 then err_eoi d else
-  let b0 = raw_byte d in
-  let b1 = raw_byte d in 
-  let b2 = raw_byte d in 
-  let b3 = raw_byte d in 
+  let b0 = raw_byte d in let b1 = raw_byte d in 
+  let b2 = raw_byte d in let b3 = raw_byte d in 
   let s0 = (b0 lsl 8) lor b1 in 
   let s1 = (b2 lsl 8) lor b3 in 
   `Ok ((s0 lsl 16) lor s1)
   
 let d_fixed d = 
   if miss d 4 then err_eoi d else
-  let b0 = raw_byte d in
-  let b1 = raw_byte d in 
-  let b2 = raw_byte d in 
-  let b3 = raw_byte d in 
+  let b0 = raw_byte d in let b1 = raw_byte d in 
+  let b2 = raw_byte d in let b3 = raw_byte d in 
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (s0, s1)
-    
+
 let rec d_table_records d count = 
   if count = 0 then (d.state <- `Ready; `Ok ()) else
   d_uint32 d >>= fun tag ->
-  d_uint32 d >>= fun _ -> 
+  d_skip d 4 >>= fun () ->
   d_uint32_int d >>= fun off -> 
   d_uint32_int d >>= fun len -> 
   d.tables <- (tag, off, len) :: d.tables;
@@ -305,9 +300,7 @@ let d_version d =
 let d_structure d =                   (* offset table and table directory. *)
   d_version d >>= fun () ->                               (* offset table. *)
   d_uint16 d >>= fun count ->                                (* numTables. *)
-  d_uint16 d >>= fun _ ->
-  d_uint16 d >>= fun _ -> 
-  d_uint16 d >>= fun _ -> 
+  d_skip d (3 * 2) >>= fun () ->
   set_ctx d `Table_directory;                          (* table directory. *)
   d_table_records d count   
 
@@ -333,7 +326,9 @@ let table_raw d tag =
   init_decoder d >>= seek_table d tag >>= fun len -> 
   match len with 
   | None -> `Ok None 
-  | Some l -> `Ok (Some (String.sub d.i d.i_pos l))
+  | Some len -> 
+      if d.i_pos + len > d.i_max then err_eoi d else
+      `Ok (Some (String.sub d.i d.i_pos len))
 
 (* cmap table
 
@@ -344,11 +339,65 @@ let table_raw d tag =
 type glyph_id = int
 type map_kind = [ `Glyph | `Glyph_range ]
 
-let d_cmap_format_4 d f acc () =
+let rec d_array d el count i a = 
+  if i = count then `Ok a else
+  el d >>= fun v -> a.(i) <- v; d_array d el count (i + 1) a
+
+let d_cmap_4_ranges d f acc u0s u1s delta offset count =           (* ugly. *)
+  let garray_pos = cur_pos d in
+  let rec loop acc i = 
+    if i = count then `Ok acc else
+    let i' = i + 1 in
+    let offset = offset.(i) in
+    let delta = delta.(i) in 
+    let u0 = u0s.(i) in if not (is_cp u0) then err (`Invalid_cp u0) else
+    let u1 = u1s.(i) in if not (is_cp u1) then err (`Invalid_cp u1) else 
+    if u0 > u1 then err (`Invalid_cp_range (u0, u1)) else
+    if offset = 0 then begin
+      (* The arithmetic must be performed mod 65536, this is problematic
+         for Otfm's interface semantics. We need to split the range 
+         if the the glyph range spans the bounds. *)
+      let g0 = u0 + delta in 
+      let g1 = u1 + delta in 
+      if g0 < 0 && g1 >= 0 then  
+        let acc' = f acc `Glyph_range (u0, - delta - 1) (g0 land 65535) in
+        loop (f acc' `Glyph_range (- delta, u1) 0) i'
+      else
+      if g0 <= 65535 && g1 > 65535 then 
+        let acc' = f acc `Glyph_range (u0, 65535 - delta) g0 in 
+        loop (f acc' `Glyph_range (65536 - delta, u1) 0) i'
+      else (* glyph range is inside [0;65535] or completly outside *)
+      loop (f acc `Glyph_range (u0, u1) (g0 land 65535)) i'
+    end else begin
+      let rec garray acc u u1 () = 
+        if u > u1 then `Ok acc else
+        d_uint16 d >>= fun gindex ->
+        let g = (gindex + delta) land 65535 in
+        garray (f acc `Glyph (u, u) g) (u + 1) u1 ()
+      in
+      let pos = garray_pos - (count - i) * 2 + offset in
+      seek_pos d pos >>= 
+      garray acc u0 u1 >>= fun acc -> 
+      loop acc i'
+    end
+  in
+  loop acc 0
+
+let d_cmap_4 d f acc () =
   d_uint16 d >>= fun fmt -> 
   if fmt <> 4 then err (`Unexpected_cmap_format fmt) else
-  `Ok acc
-    
+  d_skip d (2 * 2) >>= fun () ->
+  d_uint16 d >>= fun count2 -> 
+  let count = count2 / 2 in
+  d_skip d (3 * 2) >>= fun () ->
+  d_array d d_uint16 count 0 (Array.make count 0) >>= fun u1s ->
+  d_skip d 2 >>= fun () -> (* pad *) 
+  d_array d d_uint16 count 0 (Array.make count 0) >>= fun u0s ->
+  d_array d d_int16 count 0 (Array.make count 0) >>= fun delta -> 
+  d_array d d_uint16 count 0 (Array.make count 0) >>= fun offset ->
+  d_cmap_4_ranges d f acc u0s u1s delta offset count
+
+
 let rec d_cmap_groups d count f kind acc =
   if count = 0 then `Ok acc else
   d_uint32_int d >>= fun u0 -> 
@@ -359,44 +408,41 @@ let rec d_cmap_groups d count f kind acc =
   d_uint32_int d >>= fun gid -> 
   d_cmap_groups d (count - 1) f kind (f acc kind (u0, u1) gid)
 
-let d_cmap_format_seg fmt kind d f acc () = 
+let d_cmap_seg fmt kind d f acc () = 
   d_uint16 d >>= fun fmt' -> 
   if fmt' <> fmt then err (`Unexpected_cmap_format fmt') else
-  d_uint16 d >>= fun _ ->
-  d_uint32_int d >>= fun _ -> 
-  d_uint32_int d >>= fun _ -> 
+  d_skip d (2 + 2 * 4) >>= fun () ->
   d_uint32_int d >>= fun count ->
   d_cmap_groups d count f kind acc
 
-let d_cmap_format_12 d f acc () = d_cmap_format_seg 12 `Glyph_range d f acc ()
-let d_cmap_format_13 d f acc () = d_cmap_format_seg 13 `Glyph d f acc ()
+let d_cmap_12 d f acc () = d_cmap_seg 12 `Glyph_range d f acc ()
+let d_cmap_13 d f acc () = d_cmap_seg 13 `Glyph d f acc ()
 
-let rec d_cmap_encoding_records d count enc acc = 
+let rec d_cmap_records d count enc acc = 
   if count = 0 then match enc with 
   | `None -> err (`Unsupported_cmaps acc)
   | enc -> `Ok enc
   else
   d_uint16 d >>= fun pid ->
   d_uint16 d >>= fun eid -> 
-  d_uint32_int d >>= fun off -> 
+  d_uint32_int d >>= fun pos -> 
   match pid, eid with      (* N.B. records are ordered by (pid,eid) in file *)
-  | 0, 6 -> `Ok (`F13 off) 
-  | 3, 10 -> `Ok (`F12 off) 
-  | 3,  1 -> d_cmap_encoding_records d (count - 1) (`F4 off) acc
-  | p -> d_cmap_encoding_records d (count - 1) enc (p :: acc)
+  | 0, 6 -> `Ok (`F13 pos) 
+  | 3, 10 -> `Ok (`F12 pos) 
+  | 3,  1 -> d_cmap_records d (count - 1) (`F4 pos) acc
+  | 0, 3 -> `Ok (`F4 pos)
+  | p -> d_cmap_records d (count - 1) enc (p :: acc)
 
 let table_cmap d f acc = 
   init_decoder d >>= seek_required_table d Tag.t_cmap >>= fun () ->
   d_uint16 d >>= fun version ->                           (* cmap header. *)
   if version <> 0 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun count ->                               (* numTables. *)
-  set_ctx d `Encoding_record;
-  d_cmap_encoding_records d count `None [] >>= fun enc -> 
-  let ctx = `Cmap_subtable in
+  d_cmap_records d count `None [] >>= fun enc -> 
   match enc with
-  | `F4  off -> seek_table_offset ~ctx d off >>= d_cmap_format_4  d f acc
-  | `F12 off -> seek_table_offset ~ctx d off >>= d_cmap_format_12 d f acc
-  | `F13 off -> seek_table_offset ~ctx d off >>= d_cmap_format_13 d f acc
+  | `F4  pos -> seek_table_pos d pos >>= d_cmap_4  d f acc
+  | `F12 pos -> seek_table_pos d pos >>= d_cmap_12 d f acc
+  | `F13 pos -> seek_table_pos d pos >>= d_cmap_13 d f acc
   | `None -> assert false
    
 (*---------------------------------------------------------------------------
