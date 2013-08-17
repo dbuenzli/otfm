@@ -1,0 +1,25 @@
+#!/bin/sh
+
+# Usage: build has_native
+
+set -e 
+LOC=`dirname $0`
+
+. $LOC/pkg-builder
+
+NATIVE=$1
+
+add lib pkg/META		
+add lib src/otfm.mli	
+add lib src/otfm.cmi
+add lib src/otfm.cmx
+add lib src/otfm.cma
+add lib src/otfm.a
+add lib src/otfm.cmxa
+add lib src/otfm.cmxs
+
+add doc README.md
+add doc CHANGES.md
+
+build
+install otfm

@@ -264,6 +264,10 @@ val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
     is returned with the list of platform id, encoding id, format
     available in the font. *)
 
+(** {2 glyf table} *)
+
+
+
 (** {1:limitations Limitations} 
 
     As it stands [Otfm] has the following limitations.  Some of these

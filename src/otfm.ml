@@ -327,11 +327,7 @@ let table_raw d tag =
       if d.i_pos + len > d.i_max then err_eoi d else
       `Ok (Some (String.sub d.i d.i_pos len))
 
-(* cmap table
-
-   We support only microsoft unicode encodings, they are those that
-   are in the standard. We look for an UCS-4 character map and if
-   that fails for an UCS-2 one. *)
+(* cmap table *)
 
 type glyph_id = int
 type map_kind = [ `Glyph | `Glyph_range ]
@@ -421,7 +417,7 @@ let rec d_cmap_records d count acc =
   seek_pos d cur >>= fun () ->
   d_cmap_records d (count - 1) ((pos, pid, eid, fmt) :: acc)
 
-let select_cmap cmaps = 
+let select_cmap cmaps =
   let rec loop f sel = function 
   | (_, _, _, (4 | 12 | 13 as f') as c) :: cs when f' > f -> loop f (Some c) cs
   | [] -> sel
