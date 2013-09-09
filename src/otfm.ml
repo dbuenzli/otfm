@@ -14,6 +14,7 @@ let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s
    versions makes everything safe in the module. He won't be
    upset. *)
 
+let unsafe_chr = Char.unsafe_chr
 let unsafe_byte s j = Char.code (String.get s j)
 
 (* Pretty printers *)
@@ -139,6 +140,7 @@ type error = [
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
+  | `Invalid_postscript_name of string
   | `Unexpected_eoi of error_ctx ]
 
 let pp_ctx ppf = function 
@@ -165,6 +167,8 @@ let pp_error ppf = function
     pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
 | `Invalid_cp_range (u0, u1) -> 
     pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
+| `Invalid_postscript_name n -> 
+    pp ppf "@[Invalid@ PostScript@ name (%s)@]" (String.escaped n)
 | `Unexpected_eoi ctx -> 
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx;
 
@@ -182,7 +186,8 @@ type decoder =
     mutable state : [ `Fatal of error | `Start | `Ready ]; (* decoder state. *)
     mutable ctx : error_ctx;                   (* the current error context. *)
     mutable flavour : [ `TTF | `CFF ];                   (* decoded flavour. *)
-    mutable tables : (tag * int * int) list }      (* decoded table records. *)
+    mutable tables : (tag * int * int) list;       (* decoded table records. *)
+    mutable buf : Buffer.t; }                            (* internal buffer. *) 
   
 let decoder_src d = (`String d.i)
 let decoder src = 
@@ -190,7 +195,8 @@ let decoder src =
   | `String s -> s, 0, String.length s - 1 
   in 
   { i; i_pos; i_max; t_pos = 0; 
-    state = `Start; ctx = `Offset_table; flavour = `TTF; tables = []; }
+    state = `Start; ctx = `Offset_table; flavour = `TTF; tables = []; 
+    buf = Buffer.create 253; }
   
 let ( >>= ) x f = match x with `Ok v -> f v | `Error _ as e -> e
 let err e = `Error e
@@ -224,7 +230,15 @@ let seek_required_table tag d () = match seek_table tag d () with
 let d_skip n d = 
   if miss d n then err_eoi d else 
   (d.i_pos <- d.i_pos + n; `Ok ())
-  
+
+let d_bytes len d = 
+  if miss d len then err_eoi d else 
+  begin 
+    Buffer.clear d.buf; 
+    for i = 1 to len do Buffer.add_char d.buf (unsafe_chr (raw_byte d)) done; 
+    `Ok (Buffer.contents d.buf)
+  end
+
 let d_uint8 d = if miss d 1 then err_eoi d else `Ok (raw_byte d)
 let d_int8 d = match d_uint8 d with
 | `Ok i -> `Ok (if i > 0x7F then i - 0x100 else i)
@@ -288,6 +302,55 @@ let d_fixed d =
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (s0, s1)
 
+let u_rep = 0xFFFD                                 (* replacement character. *)
+let d_utf16be len (* in bytes *) d =     (* UTF functions adapted from Uutf. *)
+  let add_utf_8 u =
+    let w byte = Buffer.add_char d.buf (unsafe_chr byte) in
+    if u <= 0x007F then (w u)
+    else if u <= 0x07FF then begin 
+      w (0xC0 lor (u lsr 6)); 
+      w (0x80 lor (u land 0x3F))
+    end else if u <= 0xFFFF then begin
+      w (0xE0 lor (u lsr 12));
+      w (0x80 lor ((u lsr 6) land 0x3F));
+      w (0x80 lor (u land 0x3F))
+    end else begin 
+      w (0xF0 lor (u lsr 18));
+      w (0x80 lor ((u lsr 12) land 0x3F));
+      w (0x80 lor ((u lsr 6) land 0x3F));
+      w (0x80 lor (u land 0x3F))
+    end
+  in
+  let r_utf_16 () =                          (* May return a high surrogate. *)
+    let b0 = raw_byte d in 
+    let b1 = raw_byte d in
+    let u = (b0 lsl 8) lor b1 in
+    if u < 0xD800 || u > 0xDFFF then `Uchar u else
+    if u > 0xDBFF then (* malformed *) `Uchar u_rep else `Hi u 
+  in
+  let r_utf_16_lo hi =                (* Combines [hi] with a low surrogate. *)
+    let b0 = raw_byte d in
+    let b1 = raw_byte d in 
+    let lo = (b0 lsl 8) lor b1 in
+    if lo < 0xDC00 || lo > 0xDFFF 
+    then (* malformed *) u_rep 
+    else ((((hi land 0x3FF) lsl 10) lor (lo land 0x3FF)) + 0x10000)
+  in
+  let ret () = `Ok (Buffer.contents d.buf) in
+  let rec loop i l =                               (* man this loop is ugly. *) 
+    if i = l then ret () else
+    let rem = l - i in
+    if rem < 2 then (* malformed *) (add_utf_8 u_rep; ret ()) else 
+    match r_utf_16 () with 
+    | `Uchar u -> add_utf_8 u; loop (i + 2) l 
+    | `Hi hi ->
+        if rem < 4 then (* malformed *) (add_utf_8 u_rep; ret ()) else
+        (add_utf_8 (r_utf_16_lo hi); loop (i + 4) l)
+  in
+  Buffer.clear d.buf;
+  if miss d len then err_eoi d else
+  loop 0 len
+
 let rec d_table_records d count = 
   if count = 0 then (d.state <- `Ready; `Ok ()) else
   d_uint32     d >>= fun tag ->
@@ -343,9 +406,50 @@ let table_raw d tag =
 let glyph_count d = 
   init_decoder d >>=
   seek_required_table Tag.t_maxp d >>= fun () -> 
-  d_skip 4   d >>= fun () -> 
+  d_skip 4 d >>= fun () -> 
   d_uint16 d >>= fun count -> 
   `Ok count
+
+let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
+  init_decoder d >>=
+  seek_required_table Tag.t_name d >>= fun () -> 
+  d_uint16 d >>= fun version -> 
+  if version < 0 || version > 1 then err_version d (Int32.of_int version) else
+  d_uint16 d >>= fun ncount ->
+  d_uint16 d >>= fun soff -> 
+  let rec loop ncount () = 
+    if ncount = 0 then `Ok None else
+    let ncount' = ncount - 1 in
+    let look_for the_eid the_lid decode = 
+      d_uint16 d >>= fun eid -> 
+      if eid <> the_eid then d_skip (4 * 2) d >>= loop ncount' else 
+      d_uint16 d >>= fun lid -> 
+      if lid <> the_lid then d_skip (3 * 2) d >>= loop ncount' else
+      d_uint16 d >>= fun nid -> 
+      if nid <> 6 then d_skip (2 * 2) d >>= loop ncount' else 
+      d_uint16 d >>= fun len ->
+      d_uint16 d >>= fun off ->
+      seek_table_pos (soff + off) d >>= fun () ->
+      decode len d >>= fun name ->
+      let invalid name = `Error (`Invalid_postscript_name name) in
+      let name_len = String.length name in 
+      if name_len > 63 then invalid name else           
+      try 
+        for i = 0 to name_len - 1 do match Char.code name.[i] with
+        | d when d < 33 || d > 126 -> raise Exit
+        | 91 | 93 | 40 | 41 | 123 | 125 | 60 | 62 | 47 | 37 -> raise Exit
+        | _ -> ()
+        done;
+        `Ok (Some name)
+      with Exit -> invalid name
+    in
+    d_uint16 d >>= function
+    | 3 -> look_for 1 0x409 d_utf16be 
+    | 1 -> look_for 0 0 d_bytes 
+    | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)  
+  in
+  loop ncount ()
+
 
 (* cmap table *)
 
@@ -561,6 +665,127 @@ let hmtx d f acc =
   seek_required_table Tag.t_hmtx d () >>= fun () ->
   d_hmetric hm_count hm_count f acc (-1) d >>= fun (acc, last_adv) -> 
   d_hlsb glyph_count (glyph_count - hm_count) f acc last_adv d
+
+(* name table *) 
+
+(* Source: https://skia.googlecode.com/svn/trunk/src/sfnt/SkOTTable_name.cpp 
+   BSD3 licensed (c) 2011 Google Inc. *)
+let lcid_to_bcp47 = [
+  0x0401, "ar-sa";  0x0402, "bg-bg";  0x0403, "ca-es";  0x0404, "zh-tw"; 
+  0x0405, "cs-cz";  0x0406, "da-dk";  0x0407, "de-de";  0x0408, "el-gr"; 
+  0x0409, "en-us";  0x040a, "es-es_tradnl";             0x040b, "fi-fi"; 
+  0x040c, "fr-fr";  0x040d, "he-il";  0x040d, "he";     0x040e, "hu-hu"; 
+  0x040e, "hu";     0x040f, "is-is";  0x0410, "it-it";  0x0411, "ja-jp"; 
+  0x0412, "ko-kr";  0x0413, "nl-nl";  0x0414, "nb-no";  0x0415, "pl-pl"; 
+  0x0416, "pt-br";  0x0417, "rm-ch";  0x0418, "ro-ro";  0x0419, "ru-ru"; 
+  0x041a, "hr-hr";  0x041b, "sk-sk";  0x041c, "sq-al";  0x041d, "sv-se"; 
+  0x041e, "th-th";  0x041f, "tr-tr";  0x0420, "ur-pk";  0x0421, "id-id"; 
+  0x0422, "uk-ua";  0x0423, "be-by";  0x0424, "sl-si";  0x0425, "et-ee"; 
+  0x0426, "lv-lv";  0x0427, "lt-lt";  0x0428, "tg-cyrl-tj"; 
+  0x0429, "fa-ir";  0x042a, "vi-vn";  0x042b, "hy-am";  0x042c, "az-latn-az";
+  0x042d, "eu-es";  0x042e, "hsb-de"; 0x042f, "mk-mk";  0x0432, "tn-za"; 
+  0x0434, "xh-za";  0x0435, "zu-za";  0x0436, "af-za";  0x0437, "ka-ge"; 
+  0x0438, "fo-fo";  0x0439, "hi-in";  0x043a, "mt-mt";  0x043b, "se-no"; 
+  0x043e, "ms-my";  0x043f, "kk-kz";  0x0440, "ky-kg";  0x0441, "sw-ke"; 
+  0x0442, "tk-tm";  0x0443, "uz-latn-uz";               0x0443, "uz";    
+  0x0444, "tt-ru";  0x0445, "bn-in";  0x0446, "pa-in";  0x0447, "gu-in"; 
+  0x0448, "or-in";  0x0449, "ta-in";  0x044a, "te-in";  0x044b, "kn-in"; 
+  0x044c, "ml-in";  0x044d, "as-in";  0x044e, "mr-in";  0x044f, "sa-in"; 
+  0x0450, "mn-cyrl";0x0451, "bo-cn";  0x0452, "cy-gb";  0x0453, "km-kh"; 
+  0x0454, "lo-la";  0x0456, "gl-es";  0x0457, "kok-in"; 0x045a, "syr-sy"; 
+  0x045b, "si-lk";  0x045d, "iu-cans-ca";               0x045e, "am-et"; 
+  0x0461, "ne-np";  0x0462, "fy-nl";  0x0463, "ps-af";  0x0464, "fil-ph"; 
+  0x0465, "dv-mv";  0x0468, "ha-latn-ng";               0x046a, "yo-ng";
+  0x046b, "quz-bo"; 0x046c, "nso-za"; 0x046d, "ba-ru";  0x046e, "lb-lu"; 
+  0x046f, "kl-gl";  0x0470, "ig-ng";  0x0478, "ii-cn";  0x047a, "arn-cl";
+  0x047c, "moh-ca"; 0x047e, "br-fr";  0x0480, "ug-cn";  0x0481, "mi-nz"; 
+  0x0482, "oc-fr";  0x0483, "co-fr";  0x0484, "gsw-fr"; 0x0485, "sah-ru";
+  0x0486, "qut-gt"; 0x0487, "rw-rw";  0x0488, "wo-sn";  0x048c, "prs-af";
+  0x0491, "gd-gb";  0x0801, "ar-iq";  0x0804, "zh-hans";0x0807, "de-ch"; 
+  0x0809, "en-gb";  0x080a, "es-mx";  0x080c, "fr-be";  0x0810, "it-ch"; 
+  0x0813, "nl-be";  0x0814, "nn-no";  0x0816, "pt-pt";  0x081a, "sr-latn-cs";
+  0x081d, "sv-fi";  0x082c, "az-cyrl-az";               0x082e, "dsb-de";
+  0x082e, "dsb";    0x083b, "se-se";  0x083c, "ga-ie";  0x083e, "ms-bn"; 
+  0x0843, "uz-cyrl-uz";               0x0845, "bn-bd";  0x0850, "mn-mong-cn";
+  0x085d, "iu-latn-ca";               0x085f, "tzm-latn-dz"; 
+  0x086b, "quz-ec"; 0x0c01, "ar-eg";  0x0c04, "zh-hant";0x0c07, "de-at"; 
+  0x0c09, "en-au";  0x0c0a, "es-es";  0x0c0c, "fr-ca";  0x0c1a, "sr-cyrl-cs";
+  0x0c3b, "se-fi";  0x0c6b, "quz-pe"; 0x1001, "ar-ly";  0x1004, "zh-sg"; 
+  0x1007, "de-lu";  0x1009, "en-ca";  0x100a, "es-gt";  0x100c, "fr-ch"; 
+  0x101a, "hr-ba";  0x103b, "smj-no"; 0x1401, "ar-dz";  0x1404, "zh-mo"; 
+  0x1407, "de-li";  0x1409, "en-nz";  0x140a, "es-cr";  0x140c, "fr-lu"; 
+  0x141a, "bs-latn-ba";               0x141a, "bs";     0x143b, "smj-se";
+  0x143b, "smj";    0x1801, "ar-ma";  0x1809, "en-ie";  0x180a, "es-pa"; 
+  0x180c, "fr-mc";  0x181a, "sr-latn-ba";               0x183b, "sma-no";
+  0x1c01, "ar-tn";  0x1c09, "en-za";  0x1c0a, "es-do";  0x1c1a, "sr-cyrl-ba";
+  0x1c3b, "sma-se"; 0x1c3b, "sma";    0x2001, "ar-om";  0x2009, "en-jm"; 
+  0x200a, "es-ve";  0x201a, "bs-cyrl-ba";               0x201a, "bs-cyrl";
+  0x203b, "sms-fi"; 0x203b, "sms";    0x2401, "ar-ye";  0x2409, "en-029";
+  0x240a, "es-co";  0x241a, "sr-latn-rs";               0x243b, "smn-fi";
+  0x2801, "ar-sy";  0x2809, "en-bz";  0x280a, "es-pe";  0x281a, "sr-cyrl-rs";
+  0x2c01, "ar-jo";  0x2c09, "en-tt";  0x2c0a, "es-ar";  0x2c1a, "sr-latn-me";
+  0x3001, "ar-lb";  0x3009, "en-zw";  0x300a, "es-ec";  0x301a, "sr-cyrl-me";
+  0x3401, "ar-kw";  0x3409, "en-ph";  0x340a, "es-cl";  0x3801, "ar-ae"; 
+  0x380a, "es-uy";  0x3c01, "ar-bh";  0x3c0a, "es-py";  0x4001, "ar-qa"; 
+  0x4009, "en-in";  0x400a, "es-bo";  0x4409, "en-my";  0x440a, "es-sv"; 
+  0x4809, "en-sg";  0x480a, "es-hn";  0x4c0a, "es-ni";  0x500a, "es-pr"; 
+  0x540a, "es-us"; ]
+
+type lang = string
+
+let rec d_name_langs soff ncount d = 
+  d_skip (ncount * 6 * 2) d >>= fun () -> 
+  d_uint16                d >>= fun lcount -> 
+  let rec loop i acc = 
+    if ncount = 0 then `Ok acc else 
+    d_uint16 d >>= fun len -> 
+    d_uint16 d >>= fun off ->
+    let cpos = cur_pos d in 
+    seek_table_pos (soff + off) d >>= fun () -> 
+    d_utf16be len d >>= fun lang -> 
+    seek_pos cpos d >>= fun () ->
+    loop (i - 1) ((0x8000 + (ncount - i), lang) :: acc)
+  in
+  loop ncount [] 
+
+let rec d_name_records soff ncount f acc langs seen d =
+  if ncount = 0 then `Ok acc else
+  d_uint16 d >>= fun pid -> 
+  d_uint16 d >>= fun eid -> 
+  d_uint16 d >>= fun lid -> 
+  d_uint16 d >>= fun nid -> 
+  d_uint16 d >>= fun len -> 
+  d_uint16 d >>= fun off ->
+  match pid, eid with 
+  | (0 | 2), _ | 3, 1 -> 
+      let cpos = cur_pos d in
+      let n = (nid, lid) in 
+      if List.mem n seen 
+      then d_name_records soff (ncount - 1) f acc langs seen d 
+      else
+      seek_table_pos (soff + off) d >>= fun () -> 
+      d_utf16be len d >>= fun v -> 
+      seek_pos cpos d >>= fun () ->
+      let lang = try List.assoc lid langs with Not_found -> "und" in
+      let acc' = f acc nid lang v in 
+      d_name_records soff (ncount - 1) f acc' langs (n :: seen) d
+  | _ -> 
+      d_name_records soff (ncount - 1) f acc langs seen d
+  
+
+let name d f acc =
+  init_decoder d >>= 
+  seek_required_table Tag.t_name d >>= fun () -> 
+  d_uint16 d >>= fun version -> 
+  if version < 0 || version > 1 then err_version d (Int32.of_int version) else
+  d_uint16 d >>= fun ncount ->
+  d_uint16 d >>= fun soff -> 
+  let cpos = cur_pos d in
+  (if version = 0 then `Ok [] else d_name_langs soff ncount d) >>= fun langs -> 
+  let langs = List.rev_append langs lcid_to_bcp47 in 
+  seek_pos cpos d >>= fun () ->
+  d_name_records soff ncount f acc langs [] d
+
   
   
 (*---------------------------------------------------------------------------

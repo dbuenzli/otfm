@@ -13,6 +13,9 @@
     Consult the {{!limitations}limitations} and {{!examples}example} of 
     use. 
 
+    {b Note.} Unless otherwise noted the strings returned are UTF-8 
+    encoded.
+
     {e Release %%VERSION%% — %%MAINTAINER%% }
     {3 References}
     {ul 
@@ -189,8 +192,12 @@ type error = [
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
+  | `Invalid_postscript_name of string
   | `Unexpected_eoi of error_ctx ]
-(** The type for decoding errors. *)
+(** The type for decoding errors.
+    
+    {b Note.} In case of [`Invalid_poscript_name] a string of {e bytes} is 
+    returned. *)
 
 val pp_error : Format.formatter -> [< error] -> unit 
 (** [pp_error ppf e] prints an uspecified representation of [e] on [ppf].*)
@@ -238,6 +245,11 @@ val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
 
 val glyph_count : decoder -> [ `Ok of int | `Error of error ]
 (** [glyph_count d] is the number of glyphs in the font (bounded by [65535]). *)
+
+val postscript_name : decoder -> [ `Ok of string option | `Error of error ] 
+(** [poscript_name d] is the PostScript name of [d]. Looks up and validates
+    as mandated by the OTF standard, don't rely on {!name} if you really
+    need this information. *)
 
 (** {2:cmap cmap table} *)
 
@@ -324,6 +336,29 @@ val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) ->
     [gid] the glyph id, [adv] the (unsigned) advance width, and [lsb]
     the (signed) left side bearing. *)
 
+(** {2:name name table} *)
+
+type lang = string
+(** The type for {{:http://tools.ietf.org/html/bcp47}BCP 47} language tags. 
+
+    {b Note.} The module normalizes Windows language ids to BCP 47 and 
+    returns lowercased tags. *) 
+
+val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a -> 
+  [ `Ok of 'a | `Error of error ]
+(** [name d f acc] folds over the name records of the font by 
+    reading the {{:http://www.microsoft.com/typography/otspec/name.htm}name}
+    table. [f] is applied on each name id entry with [f acc nid lang name] 
+    with [nid] the name id, lang the language tag, and [name] the UTF-8 
+    encoded name value.
+
+    {b Limitations.} Lookups data only in platform ids 0, 2 and 3 (Unicode, 
+    ISO and Windows) with UTF-16BE encoding and reports only the data of 
+    the first one it finds for a given name id. 
+
+    {b Important.} If you are looking for the postcript name use 
+    {!postscript_name}. *)
+
 (** {1:limitations Limitations} 
 
     As it stands [Otfm] has the following limitations.  Some of these
@@ -337,7 +372,9 @@ val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) ->
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font 
        files tend to be smaller than 16 Mo).}
-    {- Table checksums are not verified.}} *)
+    {- Table checksums are not verified.}
+    {- See also the table decoding functions for other limitations.}}
+*)
 
 (** {1:examples Examples} *)
 

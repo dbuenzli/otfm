@@ -89,11 +89,19 @@ let pp_hmtx ppf inf d =
   | `Error e -> log_err inf e 
   | `Ok () -> pp ppf ")@]"
   
+let pp_name ppf inf d = 
+  let pp_n ppf () id lang string = pp ppf "@,(%d %s \"%s\")" id lang string in
+  pp ppf "@,@[<v1>(name"; 
+  match Otfm.name d (pp_n ppf) () with 
+  | `Error e -> log_err inf e 
+  | `Ok () -> pp ppf ")@]"
+
 let pp_tables ppf inf d =
   pp_cmap ppf inf d; 
   pp_head ppf inf d;
   pp_hhea ppf inf d;
-  pp_hmtx ppf inf d
+  pp_hmtx ppf inf d;
+  pp_name ppf inf d
  
 let pp_file ppf inf = match string_of_file inf with
 | None -> () 
@@ -114,9 +122,29 @@ let pp_file ppf inf = match string_of_file inf with
             pp_tables ppf inf d;
             pp ppf ")@]@."
 
-let pp_files files = match files with
-| [] -> pp_file Format.std_formatter "-" 
-| fs -> List.iter (pp_file Format.std_formatter) fs
+let dec_file inf = match string_of_file inf with 
+| None -> () 
+| Some s -> 
+    let d = Otfm.decoder (`String s) in 
+    let ( >>= ) x f = match x with `Ok _ -> f x | `Error e -> log_err inf e in
+    let nop4 _ _ _ _ = () in
+    Otfm.flavour d      >>= fun _ -> 
+    Otfm.table_list d   >>= fun _ ->
+    Otfm.cmap d nop4 () >>= fun _ -> 
+    Otfm.head d         >>= fun _ -> 
+    Otfm.hhea d         >>= fun _ -> 
+    Otfm.hmtx d nop4 () >>= fun _ -> 
+    Otfm.name d nop4 () >>= fun _ -> ()
+
+let ps_file inf = match string_of_file inf with
+| None -> () 
+| Some s -> 
+    let d = Otfm.decoder (`String s) in 
+    begin match Otfm.postscript_name d with 
+    | `Error e -> log_err inf e 
+    | `Ok (Some n) -> Printf.printf "%s: %s\n" inf n 
+    | `Ok None -> Printf.printf "%s: NONE\n" inf
+    end
 
 let main () = 
   let usage = Printf.sprintf 
@@ -125,18 +153,24 @@ let main () =
     Options:" exec 
   in
   let cmd = ref `Pp in 
-(*  let set_cmd v () = cmd := v in  *)
+  let set_cmd v () = cmd := v in
   let files = ref [] in 
   let add_file f = files := f :: !files in
   let options = [
-(*    "-ocaml", Arg.Unit (set_cmd `OCaml), " Outputs an OCaml module"; *)
+    "-d", Arg.Unit (set_cmd `Dec), "Decode only";
+    "-p", Arg.Unit (set_cmd `Ps), "Output postscript name"; 
   ]
   in
   Arg.parse (Arg.align options) add_file usage; 
-  begin match !cmd with 
-  | `Pp -> pp_files (List.rev !files)
-(*  | `OCaml -> failwith "TODO" *)
-  end; 
+  let files = match List.rev ! files with 
+  | [] -> ["-"] | fs -> fs
+  in
+  let cmd = match !cmd with 
+  | `Pp -> pp_file Format.std_formatter
+  | `Dec -> dec_file
+  | `Ps -> ps_file
+  in
+  List.iter cmd files;
   if !err then exit 1 else exit 0 
 
 let () = main ()
