@@ -82,10 +82,18 @@ let pp_hhea ppf inf d =
       pp ppf "@,(caret-offset %d)" h.Otfm.hhea_caret_offset;
       pp ppf ")@]"
 
+let pp_hmtx ppf inf d = 
+  let pp_hm ppf () id adv lsb = pp ppf "@,(%d (adv %d) (lsb %d))" id adv lsb in
+  pp ppf "@,@[<v1>(hmtx";
+  match Otfm.hmtx d (pp_hm ppf) () with 
+  | `Error e -> log_err inf e 
+  | `Ok () -> pp ppf ")@]"
+  
 let pp_tables ppf inf d =
   pp_cmap ppf inf d; 
   pp_head ppf inf d;
-  pp_hhea ppf inf d
+  pp_hhea ppf inf d;
+  pp_hmtx ppf inf d
  
 let pp_file ppf inf = match string_of_file inf with
 | None -> () 

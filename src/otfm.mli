@@ -205,7 +205,7 @@ val decoder : [< src ] -> decoder
 (** [decoder src] is a decoder decoding from [src]. *)
 
 val decoder_src : decoder -> src 
-(** [decocer_src d] is [d]'s input source. *)
+(** [decoder_src d] is [d]'s input source. *)
 
 (** {1 Table decoding} 
 
@@ -232,10 +232,17 @@ val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
+(** {2:convenience Convenience decodes} 
+
+    These functions lookup data in the right table. *)
+
+val glyph_count : decoder -> [ `Ok of int | `Error of error ]
+(** [glyph_count d] is the number of glyphs in the font (bounded by [65535]). *)
+
 (** {2:cmap cmap table} *)
 
 type glyph_id = int
-(** The type for glyph ids. *)
+(** The type for glyph ids. From [0] to [65534]*)
 
 type map_kind = [ `Glyph | `Glyph_range ]
 (** The type for map kinds. 
@@ -305,6 +312,17 @@ type hhea =
 
 val hhea : decoder -> [ `Ok of hhea | `Error of error ] 
 (** [hhea d] is the hhea table. *)
+
+(** {2:hmtx hmtx table} *)
+
+val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) -> 
+  'a -> [ `Ok of 'a | `Error of error ]
+(** [hmtx d f acc] folds over the horizontal metrics of the font by
+    reading the
+    {{:http://www.microsoft.com/typography/otspec/hmtx.htm}hmtx}
+    table.  [f] is applied on each entry with [f acc gid adv lsb] with
+    [gid] the glyph id, [adv] the (unsigned) advance width, and [lsb]
+    the (signed) left side bearing. *)
 
 (** {1:limitations Limitations} 
 

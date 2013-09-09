@@ -338,6 +338,15 @@ let table_raw d tag =
       if d.i_pos + len > d.i_max then err_eoi d else
       `Ok (Some (String.sub d.i d.i_pos len))
 
+(* convenience *)
+        
+let glyph_count d = 
+  init_decoder d >>=
+  seek_required_table Tag.t_maxp d >>= fun () -> 
+  d_skip 4   d >>= fun () -> 
+  d_uint16 d >>= fun count -> 
+  `Ok count
+
 (* cmap table *)
 
 type glyph_id = int
@@ -524,6 +533,35 @@ let hhea d =
         hhea_min_left_side_bearing; hhea_min_right_side_bearing; 
         hhea_xmax_extent; hhea_caret_slope_rise; hhea_caret_slope_run; 
         hhea_caret_offset; }
+
+(* hmtx table *) 
+
+let d_hm_count d = 
+  seek_required_table Tag.t_hhea d () >>= fun () -> 
+  d_skip (4 + 15 * 2) d >>= fun () -> 
+  d_uint16            d >>= fun hm_count -> 
+  `Ok hm_count
+
+let rec d_hmetric goffset i f acc last_adv d = 
+  if i = 0 then `Ok (acc, last_adv) else
+  d_uint16 d >>= fun adv ->
+  d_int16  d >>= fun lsb ->
+  let acc' = f acc (goffset - i) adv lsb in
+  d_hmetric goffset (i - 1) f acc' adv d
+
+let rec d_hlsb goffset i f acc adv d = 
+  if i = 0 then `Ok acc else 
+  d_int16 d >>= fun lsb -> 
+  let acc' = f acc (goffset - i) adv lsb in
+  d_hlsb goffset (i - 1) f acc' adv d
+
+let hmtx d f acc =
+  glyph_count d >>= fun glyph_count ->
+  d_hm_count  d >>= fun hm_count ->
+  seek_required_table Tag.t_hmtx d () >>= fun () ->
+  d_hmetric hm_count hm_count f acc (-1) d >>= fun (acc, last_adv) -> 
+  d_hlsb glyph_count (glyph_count - hm_count) f acc last_adv d
+  
   
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
