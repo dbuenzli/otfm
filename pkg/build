@@ -18,6 +18,8 @@ add lib src/otfm.a
 add lib src/otfm.cmxa
 add lib src/otfm.cmxs
 
+add bin test/otfpp
+
 add doc README.md
 add doc CHANGES.md
 

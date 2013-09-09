@@ -40,6 +40,6 @@ distribution. They can be built with:
 The resulting binaries are in `_build/test`:
 
 - `test.byte` tests the library, nothing should fail.
-- `otfdump.native`, dumps file information on stdout, invoke with
-  `--help` for more information.
+- `otfpp.native`, pretty prints OpenType files invoke with `--help`
+  for more information.
 

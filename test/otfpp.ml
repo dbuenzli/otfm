@@ -32,7 +32,7 @@ let string_of_file inf =
   with
   | Sys_error e -> log "%s" e; None
 
-let dump_cmap ppf inf d =
+let pp_cmap ppf inf d =
   let pp_map ppf u gid = pp ppf "@,(%a %d)" Otfm.pp_cp u gid in
   let pp_binding ppf () k (u0, u1) gid = match k with 
   | `Glyph -> for u = u0 to u1 do pp_map ppf u gid done
@@ -46,7 +46,7 @@ let dump_cmap ppf inf d =
       pp ppf "@,@[<1>(source@ (platform-id %d)@ (encoding-id %d)\
               @ (format %d))@])@]" pid eid fmt
 
-let dump_head ppf inf d = 
+let pp_head ppf inf d = 
   pp ppf "@,@[<v1>(head"; 
   match Otfm.head d with 
   | `Error e -> log_err inf e
@@ -65,12 +65,11 @@ let dump_head ppf inf d =
       pp ppf "@,(index_to_loc_format %d)" h.Otfm.head_index_to_loc_format;
       pp ppf ")@]"
 
-
-let dump_tables ppf inf d =
-  dump_cmap ppf inf d; 
-  dump_head ppf inf d
+let pp_tables ppf inf d =
+  pp_cmap ppf inf d; 
+  pp_head ppf inf d
  
-let dump_file ppf inf = match string_of_file inf with
+let pp_file ppf inf = match string_of_file inf with
 | None -> () 
 | Some s -> 
     let d = Otfm.decoder (`String s) in 
@@ -86,31 +85,31 @@ let dump_file ppf inf = match string_of_file inf with
             pp ppf "@,@[<1>(tables ";
             List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts; 
             pp ppf ")@]";
-            dump_tables ppf inf d;
+            pp_tables ppf inf d;
             pp ppf ")@]@."
 
-let dump files = match files with
-| [] -> dump_file Format.std_formatter "-" 
-| fs -> List.iter (dump_file Format.std_formatter) fs
+let pp_files files = match files with
+| [] -> pp_file Format.std_formatter "-" 
+| fs -> List.iter (pp_file Format.std_formatter) fs
 
 let main () = 
   let usage = Printf.sprintf 
     "Usage: %s [OPTION]... [OTFFILE]...\n\
-    \ Dump OpenType file font information on stdout.\n\
+    \ Pretty-print OpenType file font information on stdout.\n\
     Options:" exec 
   in
-  let cmd = ref `Dump in 
+  let cmd = ref `Pp in 
   let set_cmd v () = cmd := v in 
   let files = ref [] in 
   let add_file f = files := f :: !files in
   let options = [
-    "-ocaml", Arg.Unit (set_cmd `OCaml), " Outputs an OCaml module";
+(*    "-ocaml", Arg.Unit (set_cmd `OCaml), " Outputs an OCaml module"; *)
   ]
   in
   Arg.parse (Arg.align options) add_file usage; 
   begin match !cmd with 
-  | `Dump -> dump (List.rev !files)
-  | `OCaml -> failwith "TODO"
+  | `Dump -> pp_files (List.rev !files)
+(*  | `OCaml -> failwith "TODO" *)
   end; 
   if !err then exit 1 else exit 0 
 
