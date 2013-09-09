@@ -228,7 +228,7 @@ let seek_required_table d tag () = match seek_table d tag () with
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
 
-let d_skip d n = 
+let d_skip n d = 
   if miss d n then err_eoi d else 
   (d.i_pos <- d.i_pos + n; `Ok ())
   
@@ -280,8 +280,8 @@ let d_fixed d =
 
 let rec d_table_records d count = 
   if count = 0 then (d.state <- `Ready; `Ok ()) else
-  d_uint32 d >>= fun tag ->
-  d_skip d 4 >>= fun () ->
+  d_uint32     d >>= fun tag ->
+  d_skip 4     d >>= fun () ->
   d_uint32_int d >>= fun off -> 
   d_uint32_int d >>= fun len -> 
   d.tables <- (tag, off, len) :: d.tables;
@@ -295,9 +295,9 @@ let d_version d =
   | t -> `Error (`Unknown_flavour t)
 
 let d_structure d =                   (* offset table and table directory. *)
-  d_version d >>= fun () ->                               (* offset table. *)
-  d_uint16 d >>= fun count ->                                (* numTables. *)
-  d_skip d (3 * 2) >>= fun () ->
+  d_version      d >>= fun () ->                          (* offset table. *)
+  d_uint16       d >>= fun count ->                          (* numTables. *)
+  d_skip (3 * 2) d >>= fun () ->
   set_ctx d `Table_directory;                          (* table directory. *)
   d_table_records d count   
 
@@ -377,12 +377,12 @@ let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
   loop acc 0
 
 let d_cmap_4 cmap d f acc () =
-  d_skip d (3 * 2) >>= fun () ->
+  d_skip (3 * 2) d >>= fun () ->
   d_uint16 d >>= fun count2 -> 
   let count = count2 / 2 in
-  d_skip d (3 * 2) >>= fun () ->
+  d_skip (3 * 2) d >>= fun () ->
   d_array d d_uint16 count 0 (Array.make count 0) >>= fun u1s ->
-  d_skip d 2 >>= fun () -> (* pad *) 
+  d_skip 2 d >>= fun () -> (* pad *) 
   d_array d d_uint16 count 0 (Array.make count 0) >>= fun u0s ->
   d_array d d_int16 count 0 (Array.make count 0) >>= fun delta -> 
   d_array d d_uint16 count 0 (Array.make count 0) >>= fun offset ->
@@ -399,7 +399,7 @@ let rec d_cmap_groups cmap d count f kind acc =
   d_cmap_groups cmap d (count - 1) f kind (f acc kind (u0, u1) gid)
 
 let d_cmap_seg cmap kind d f acc () = 
-  d_skip d (2 * 2 + 2 * 4) >>= fun () ->
+  d_skip (2 * 2 + 2 * 4) d >>= fun () ->
   d_uint32_int d >>= fun count ->
   d_cmap_groups cmap d count f kind acc
 
