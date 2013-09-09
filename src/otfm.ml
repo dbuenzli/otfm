@@ -108,7 +108,7 @@ module Tag = struct
     let c2 = Char.chr (Int32.(to_int (shift_right t 8)) land 0xFF) in 
     let c3 = Char.chr (Int32.(to_int t) land 0xFF) in
     Printf.sprintf "%c%c%c%c" c0 c1 c2 c3
-
+      
   let to_int32 x = x
   let compare : int32 -> int32 -> int = Pervasives.compare
   let pp ppf t = pp ppf "'%s'" (to_bytes t)
@@ -190,8 +190,7 @@ let decoder src =
   | `String s -> s, 0, String.length s - 1 
   in 
   { i; i_pos; i_max; t_pos = 0; 
-    state = `Start; ctx = `Offset_table; flavour = `TTF; 
-    tables = []; }
+    state = `Start; ctx = `Offset_table; flavour = `TTF; tables = []; }
   
 let ( >>= ) x f = match x with `Ok v -> f v | `Error _ as e -> e
 let err e = `Error e
@@ -205,19 +204,19 @@ let raw_byte d =
   d.i_pos <- d.i_pos + 1; (unsafe_byte d.i j) 
   
 let cur_pos d = d.i_pos
-let seek_pos d pos =
+let seek_pos pos d =
   if pos > d.i_max then err (`Invalid_offset (d.ctx, pos)) else 
   (d.i_pos <- pos; `Ok ())
   
-let seek_table_pos d pos = seek_pos d (d.t_pos + pos)
-let seek_table d tag () = 
+let seek_table_pos pos d = seek_pos (d.t_pos + pos) d 
+let seek_table tag d () = 
   try
     let _, pos, len = List.find (fun (t, _, _) -> tag = t) d.tables in
     if pos > d.i_max then err (`Invalid_offset (`Table tag, pos)) else
     (set_ctx d (`Table tag); d.t_pos <- pos; d.i_pos <- pos; `Ok (Some len))
   with Not_found -> `Ok None
   
-let seek_required_table d tag () = match seek_table d tag () with 
+let seek_required_table tag d () = match seek_table tag d () with 
 | `Ok (Some _) -> `Ok ()
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
@@ -331,7 +330,8 @@ let table_mem d tag =
   init_decoder d >>= fun () -> `Ok (exists_tag tag d)
 
 let table_raw d tag = 
-  init_decoder d >>= seek_table d tag >>= fun len -> 
+  init_decoder   d >>= 
+  seek_table tag d >>= fun len -> 
   match len with 
   | None -> `Ok None 
   | Some len -> 
@@ -343,9 +343,9 @@ let table_raw d tag =
 type glyph_id = int
 type map_kind = [ `Glyph | `Glyph_range ]
 
-let rec d_array d el count i a = 
+let rec d_array el count i a d = 
   if i = count then `Ok a else
-  el d >>= fun v -> a.(i) <- v; d_array d el count (i + 1) a
+  el d >>= fun v -> a.(i) <- v; d_array el count (i + 1) a d
 
 let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
   let garray_pos = cur_pos d in
@@ -380,7 +380,7 @@ let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
         garray (f acc `Glyph (u, u) g) (u + 1) u1 ()
       in
       let pos = garray_pos - (count - i) * 2 + offset in
-      seek_pos d pos >>= 
+      seek_pos pos d >>= 
       garray acc u0 u1 >>= fun acc -> 
       loop acc i'
     end
@@ -389,29 +389,28 @@ let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
 
 let d_cmap_4 cmap d f acc () =
   d_skip (3 * 2) d >>= fun () ->
-  d_uint16 d >>= fun count2 -> 
+  d_uint16       d >>= fun count2 -> 
   let count = count2 / 2 in
-  d_skip (3 * 2) d >>= fun () ->
-  d_array d d_uint16 count 0 (Array.make count 0) >>= fun u1s ->
-  d_skip 2 d >>= fun () -> (* pad *) 
-  d_array d d_uint16 count 0 (Array.make count 0) >>= fun u0s ->
-  d_array d d_int16 count 0 (Array.make count 0) >>= fun delta -> 
-  d_array d d_uint16 count 0 (Array.make count 0) >>= fun offset ->
+  let a () = Array.make count 0 in
+  d_skip (3 * 2)                  d >>= fun () ->
+  d_array d_uint16 count 0 (a ()) d >>= fun u1s ->
+  d_skip 2                        d >>= fun () -> (* pad *) 
+  d_array d_uint16 count 0 (a ()) d >>= fun u0s ->
+  d_array d_int16  count 0 (a ()) d >>= fun delta -> 
+  d_array d_uint16 count 0 (a ()) d >>= fun offset ->
   d_cmap_4_ranges cmap d f acc u0s u1s delta offset count
 
 let rec d_cmap_groups cmap d count f kind acc =
   if count = 0 then `Ok (cmap, acc) else
-  d_uint32_int d >>= fun u0 -> 
-  if not (is_cp u0) then err (`Invalid_cp u0) else 
-  d_uint32_int d >>= fun u1 -> 
-  if not (is_cp u1) then err (`Invalid_cp u1) else 
+  d_uint32_int d >>= fun u0 -> if not (is_cp u0) then err (`Invalid_cp u0) else 
+  d_uint32_int d >>= fun u1 -> if not (is_cp u1) then err (`Invalid_cp u1) else 
   if u0 > u1 then err (`Invalid_cp_range (u0, u1)) else
   d_uint32_int d >>= fun gid -> 
   d_cmap_groups cmap d (count - 1) f kind (f acc kind (u0, u1) gid)
 
 let d_cmap_seg cmap kind d f acc () = 
   d_skip (2 * 2 + 2 * 4) d >>= fun () ->
-  d_uint32_int d >>= fun count ->
+  d_uint32_int           d >>= fun count ->
   d_cmap_groups cmap d count f kind acc
 
 let d_cmap_12 cmap d f acc () = d_cmap_seg cmap `Glyph_range d f acc ()
@@ -419,13 +418,13 @@ let d_cmap_13 cmap d f acc () = d_cmap_seg cmap `Glyph d f acc ()
 
 let rec d_cmap_records d count acc = 
   if count = 0 then `Ok acc else
-  d_uint16 d >>= fun pid ->
-  d_uint16 d >>= fun eid -> 
-  d_uint32_int d >>= fun pos -> 
+  d_uint16           d >>= fun pid ->
+  d_uint16           d >>= fun eid -> 
+  d_uint32_int       d >>= fun pos -> 
   let cur = cur_pos d in
-  seek_table_pos d pos >>= fun () ->
-  d_uint16 d >>= fun fmt -> 
-  seek_pos d cur >>= fun () ->
+  seek_table_pos pos d >>= fun () ->
+  d_uint16           d >>= fun fmt -> 
+  seek_pos cur       d >>= fun () ->
   d_cmap_records d (count - 1) ((pos, pid, eid, fmt) :: acc)
 
 let select_cmap cmaps =
@@ -436,8 +435,9 @@ let select_cmap cmaps =
   in
   loop min_int None cmaps
 
-let table_cmap d f acc = 
-  init_decoder d >>= seek_required_table d Tag.t_cmap >>= fun () ->
+let cmap d f acc = 
+  init_decoder d >>= 
+  seek_required_table Tag.t_cmap d >>= fun () ->
   d_uint16 d >>= fun version ->                           (* cmap header. *)
   if version <> 0 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun count ->                               (* numTables. *)
@@ -450,7 +450,9 @@ let table_cmap d f acc =
       let cmap = match fmt with 
       | 4 -> d_cmap_4 | 12 -> d_cmap_12 | 13 -> d_cmap_13 | _ -> assert false
       in
-      seek_table_pos d pos >>= cmap (pid, eid, fmt) d f acc
+      seek_table_pos pos d >>= cmap (pid, eid, fmt) d f acc
+
+(* head table *) 
 
 type head = 
   { head_font_revision : int32;
@@ -467,7 +469,8 @@ type head =
     head_index_to_loc_format : int; }
     
 let head d = 
-  init_decoder d >>= seek_required_table d Tag.t_head >>= fun () -> 
+  init_decoder d >>= 
+  seek_required_table Tag.t_head d >>= fun () -> 
   d_uint32 d >>= fun version -> 
   if version <> 0x00010000l then err_version d version else 
   d_uint32 d >>= fun head_font_revision -> 

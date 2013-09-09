@@ -239,17 +239,18 @@ type map_kind = [ `Glyph | `Glyph_range ]
 (** The type for map kinds. 
 
     Determines how an unicode range [(u0, u1)] and a glyph id [gid]
-    must be interpreted. 
+    must be interpreted in the folding function of {!cmap}.
     {ul 
     {- [`Glyph] all characters in the range map to to [gid].}
     {- [`Glyph_range], [u0] maps to [gid], [u0 + 1] to [gid + 1], ... 
        and [u1] to [gid + (u1 - u0)]}} *)
 
-val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) -> 
+val cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) -> 
   'a -> [ `Ok of (int * int * int) * 'a | `Error of error ]
-(** [table_cmap d f acc] folds over a mapping from unicode
-    scalar values to glyph ids by reading the {!Tag.t_cmap} 
-    table. The triple of integer indicates the platform id, encoding
+(** [cmap d f acc] folds over a mapping from unicode
+    scalar values to glyph ids by reading the 
+    {{:http://www.microsoft.com/typography/otspec/cmap.htm}cmap} table.
+    The triple of integer indicates the platform id, encoding
     id and format of the cmap used.
         
     {b Limitations.} Only the format 13 (last resort font), format 12

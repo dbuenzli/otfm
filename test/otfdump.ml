@@ -39,7 +39,7 @@ let dump_cmap ppf inf d =
   | `Glyph_range -> for i = 0 to (u1 - u0) do pp_map ppf (u0 + i) (gid + i)done 
   in
   pp ppf "@,@[<v1>(cmap@,@[<v1>(";
-  match Otfm.table_cmap d (pp_binding ppf) () with
+  match Otfm.cmap d (pp_binding ppf) () with
   | `Error e -> log_err inf e
   | `Ok ((pid, eid, fmt), _) -> 
       pp ppf ")@]"; 
