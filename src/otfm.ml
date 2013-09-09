@@ -129,11 +129,9 @@ let pp_cp ppf cp =
 
 (* Decode *)
 
-type error_ctx = 
-  [ `Table of tag | `Offset_table | `Table_directory ]
-  
+type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
 type error = [ 
-  | `Unknown_flavour of tag 
+  | `Unknown_flavour of tag
   | `Unsupported_TTC
   | `Unsupported_cmaps of (int * int * int) list
   | `Missing_required_table of tag
@@ -147,10 +145,6 @@ let pp_ctx ppf = function
 | `Table tag -> pp ppf "table %a" Tag.pp tag
 | `Offset_table -> pp ppf "offset table"
 | `Table_directory -> pp ppf "table directory"
-(*
- | `Encoding_record -> pp ppf "encoding record"
- | `Cmap_subtable -> pp ppf "cmap subtable"
-*)
 
 let pp_error ppf = function 
 | `Unknown_flavour tag -> 
@@ -269,10 +263,27 @@ let d_uint32_int d =
   let s0 = (b0 lsl 8) lor b1 in 
   let s1 = (b2 lsl 8) lor b3 in 
   `Ok ((s0 lsl 16) lor s1)
-  
+
+let d_time d =                       (* LONGDATETIME as a unix time stamp. *)
+  if miss d 8 then err_eoi d else 
+  let b0 = raw_byte d in let b1 = raw_byte d in 
+  let b2 = raw_byte d in let b3 = raw_byte d in 
+  let b4 = raw_byte d in let b5 = raw_byte d in 
+  let b6 = raw_byte d in let b7 = raw_byte d in 
+  let s0 = Int64.of_int ((b0 lsl 8) lor b1) in 
+  let s1 = Int64.of_int ((b2 lsl 8) lor b3) in
+  let s2 = Int64.of_int ((b4 lsl 8) lor b5) in 
+  let s3 = Int64.of_int ((b6 lsl 8) lor b7) in
+  let v = (Int64.logor (Int64.shift_left s0 48) 
+             (Int64.logor (Int64.shift_left s1 32)
+                (Int64.logor (Int64.shift_left s2 16) s3)))
+  in
+  let unix_epoch = 2_082_844_800L (* in seconds since 1904-01-01 00:00:00 *) in
+  `Ok (Int64.to_float (Int64.sub v unix_epoch))
+
 let d_fixed d = 
   if miss d 4 then err_eoi d else
-  let b0 = raw_byte d in let b1 = raw_byte d in 
+  let b0 = raw_byte d in let b1 = raw_byte d in
   let b2 = raw_byte d in let b3 = raw_byte d in 
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
@@ -440,7 +451,43 @@ let table_cmap d f acc =
       | 4 -> d_cmap_4 | 12 -> d_cmap_12 | 13 -> d_cmap_13 | _ -> assert false
       in
       seek_table_pos d pos >>= cmap (pid, eid, fmt) d f acc
-   
+
+type head = 
+  { head_font_revision : int32;
+    head_flags : int;
+    head_units_per_em : int; 
+    head_created : float; 
+    head_modified : float; 
+    head_xmin : int; 
+    head_ymin : int; 
+    head_xmax : int; 
+    head_ymax : int; 
+    head_mac_style : int; 
+    head_lowest_rec_ppem : int;
+    head_index_to_loc_format : int; }
+    
+let head d = 
+  init_decoder d >>= seek_required_table d Tag.t_head >>= fun () -> 
+  d_uint32 d >>= fun version -> 
+  if version <> 0x00010000l then err_version d version else 
+  d_uint32 d >>= fun head_font_revision -> 
+  d_skip 8 d >>= fun () -> (* checkSumAdjustement, magicNumber *)
+  d_uint16 d >>= fun head_flags -> 
+  d_uint16 d >>= fun head_units_per_em ->
+  d_time   d >>= fun head_created -> 
+  d_time   d >>= fun head_modified -> 
+  d_int16  d >>= fun head_xmin -> 
+  d_int16  d >>= fun head_ymin -> 
+  d_int16  d >>= fun head_xmax -> 
+  d_int16  d >>= fun head_ymax -> 
+  d_uint16 d >>= fun head_mac_style ->
+  d_uint16 d >>= fun head_lowest_rec_ppem -> 
+  d_skip 2 d >>= fun () -> (* fontDirectionHint *) 
+  d_uint16 d >>= fun head_index_to_loc_format ->
+  `Ok { head_font_revision; head_flags; head_units_per_em; head_created; 
+        head_modified; head_xmin; head_ymin; head_xmax; head_ymax; 
+        head_mac_style; head_lowest_rec_ppem; head_index_to_loc_format }
+  
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.

@@ -230,7 +230,7 @@ val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
-(** {2 cmap table} *)
+(** {2:cmap cmap table} *)
 
 type glyph_id = int
 (** The type for glyph ids. *)
@@ -263,9 +263,26 @@ val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
     is returned with the list of platform id, encoding id, format
     available in the font. *)
 
-(** {2 glyf table} *)
+(** {2:head head table} *)
 
+type head = 
+  { head_font_revision : int32;
+    head_flags : int;
+    head_units_per_em : int; 
+    head_created : float; (** Unix timestamp. *) 
+    head_modified : float; (** Unix timestamp. *) 
+    head_xmin : int; 
+    head_ymin : int; 
+    head_xmax : int; 
+    head_ymax : int; 
+    head_mac_style : int; 
+    head_lowest_rec_ppem : int;
+    head_index_to_loc_format : int; }
+(** The type for representing 
+    {{:http://www.microsoft.com/typography/otspec/head.htm}head} tables. *)
 
+val head : decoder -> [ `Ok of head | `Error of error ]
+(** [head d] is the result of deocding the head table. *)
 
 (** {1:limitations Limitations} 
 

@@ -38,18 +38,37 @@ let dump_cmap ppf inf d =
   | `Glyph -> for u = u0 to u1 do pp_map ppf u gid done
   | `Glyph_range -> for i = 0 to (u1 - u0) do pp_map ppf (u0 + i) (gid + i)done 
   in
-(*  let nop () _ _ _ = () in *)
-  pp ppf "@,@[<v1>(cmap";
-  begin match Otfm.table_cmap d (pp_binding ppf) ()  with 
+  pp ppf "@,@[<v1>(cmap@,@[<v1>(";
+  match Otfm.table_cmap d (pp_binding ppf) () with
+  | `Error e -> log_err inf e
   | `Ok ((pid, eid, fmt), _) -> 
       pp ppf ")@]"; 
-      pp ppf "@,@[<1>(cmap-source@ (platform-id %d)@ (encoding-id %d)\
-              @ (format %d))@]" pid eid fmt
-  | `Error e -> log_err inf e 
-  end
-   
+      pp ppf "@,@[<1>(source@ (platform-id %d)@ (encoding-id %d)\
+              @ (format %d))@])@]" pid eid fmt
+
+let dump_head ppf inf d = 
+  pp ppf "@,@[<v1>(head"; 
+  match Otfm.head d with 
+  | `Error e -> log_err inf e
+  | `Ok h -> 
+      pp ppf "@,(font-revision 0x%08lX)" h.Otfm.head_font_revision; 
+      pp ppf "@,(flags 0x%04X)" h.Otfm.head_flags; 
+      pp ppf "@,(units-per-em %d)" h.Otfm.head_units_per_em; 
+      pp ppf "@,(created %f)" h.Otfm.head_created; 
+      pp ppf "@,(modified %f)" h.Otfm.head_modified; 
+      pp ppf "@,(xmin %d)" h.Otfm.head_xmin;
+      pp ppf "@,(ymin %d)" h.Otfm.head_ymin;
+      pp ppf "@,(xmax %d)" h.Otfm.head_xmax;
+      pp ppf "@,(ymax %d)" h.Otfm.head_ymax;
+      pp ppf "@,(mac-style 0x%04X)" h.Otfm.head_mac_style;
+      pp ppf "@,(lowest_rec_ppem %d)" h.Otfm.head_lowest_rec_ppem;
+      pp ppf "@,(index_to_loc_format %d)" h.Otfm.head_index_to_loc_format;
+      pp ppf ")@]"
+
+
 let dump_tables ppf inf d =
-  dump_cmap ppf inf d
+  dump_cmap ppf inf d; 
+  dump_head ppf inf d
  
 let dump_file ppf inf = match string_of_file inf with
 | None -> () 
