@@ -13,7 +13,7 @@
     Consult the {{!limitations}limitations} and {{!examples}example} of 
     use. 
 
-    {e Release %%VERSION%% - %%AUTHORS%% }
+    {e Release %%VERSION%% — %%MAINTAINER%% }
     {3 References}
     {ul 
     {- Microsoft.
@@ -56,7 +56,7 @@ module Tag : sig
   val t_post : tag
   (** The {{:http://www.microsoft.com/typography/otspec/post.htm}post} table. *)
     
-  (** {2 TTF font table tags} *)
+  (** {2 TTF font tables} *)
 
   val t_cvt  : tag
   (** The {{:http://www.microsoft.com/typography/otspec/cvt.htm}cvt} table. *)
@@ -69,7 +69,7 @@ module Tag : sig
   val t_prep : tag
   (** The {{:http://www.microsoft.com/typography/otspec/prep.htm}prep} table. *)
 
-  (** {2 CFF font table tags} *) 
+  (** {2 CFF font tables} *) 
     
   val t_CFF  : tag
   (** The {{:http://www.microsoft.com/typography/otspec/cff.htm}CFF} table. *)
@@ -108,7 +108,7 @@ module Tag : sig
   val t_vmtx : tag
   (** The {{:http://www.microsoft.com/typography/otspec/vmtx.htm}vmtx} table. *)
 
-  (** {2 Advanced typgraphic tables} *)
+  (** {2 Advanced typographic tables} *)
 
   val t_BASE : tag
   (** The {{:http://www.microsoft.com/typography/otspec/base.htm}BASE} table. *)
@@ -176,9 +176,8 @@ val pp_cp : Format.formatter -> int -> unit
 
 (** {1 Decode} *)
 
-type error_ctx = 
-  [ `Table of tag | `Offset_table | `Table_directory (* | `Encoding_record 
-  | `Cmap_subtable ] *) ]
+type error_ctx =
+  [ `Table of tag | `Offset_table | `Table_directory ]
 (** The type for error contexts. *)
 
 type error = [ 
@@ -277,13 +276,11 @@ val table_cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
     the individual table decoding functions for other limitations.
 
     {ul
-    {- True Type collections ([.ttc] files) are not supported} 
-    {- No support CFF fonts tables are not supported.}
+    {- True Type collections ([.ttc] files) are not supported}
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font 
        files tend to be smaller than 16 Mo).}
-    {- Table checksums are not verified.}}
-*)
+    {- Table checksums are not verified.}} *)
 
 (** {1:examples Examples} *)
 
