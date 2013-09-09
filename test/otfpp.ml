@@ -65,9 +65,27 @@ let pp_head ppf inf d =
       pp ppf "@,(index_to_loc_format %d)" h.Otfm.head_index_to_loc_format;
       pp ppf ")@]"
 
+let pp_hhea ppf inf d = 
+  pp ppf "@,@[<v1>(hhea"; 
+  match Otfm.hhea d with 
+  | `Error e -> log_err inf e
+  | `Ok h ->
+      pp ppf "@,(ascender %d)" h.Otfm.hhea_ascender; 
+      pp ppf "@,(descender %d)" h.Otfm.hhea_descender; 
+      pp ppf "@,(line-gap %d)" h.Otfm.hhea_line_gap; 
+      pp ppf "@,(advance-width-max %d)" h.Otfm.hhea_advance_width_max; 
+      pp ppf "@,(min-left-side-bearing %d)" h.Otfm.hhea_min_left_side_bearing; 
+      pp ppf "@,(min-right-side-bearing %d)" h.Otfm.hhea_min_right_side_bearing;
+      pp ppf "@,(xmax-extent %d)" h.Otfm.hhea_xmax_extent; 
+      pp ppf "@,(caret-slope-rise %d)" h.Otfm.hhea_caret_slope_rise; 
+      pp ppf "@,(caret-slope-run %d)" h.Otfm.hhea_caret_slope_run; 
+      pp ppf "@,(caret-offset %d)" h.Otfm.hhea_caret_offset;
+      pp ppf ")@]"
+
 let pp_tables ppf inf d =
   pp_cmap ppf inf d; 
-  pp_head ppf inf d
+  pp_head ppf inf d;
+  pp_hhea ppf inf d
  
 let pp_file ppf inf = match string_of_file inf with
 | None -> () 
@@ -99,7 +117,7 @@ let main () =
     Options:" exec 
   in
   let cmd = ref `Pp in 
-  let set_cmd v () = cmd := v in 
+(*  let set_cmd v () = cmd := v in  *)
   let files = ref [] in 
   let add_file f = files := f :: !files in
   let options = [
@@ -108,7 +126,7 @@ let main () =
   in
   Arg.parse (Arg.align options) add_file usage; 
   begin match !cmd with 
-  | `Dump -> pp_files (List.rev !files)
+  | `Pp -> pp_files (List.rev !files)
 (*  | `OCaml -> failwith "TODO" *)
   end; 
   if !err then exit 1 else exit 0 

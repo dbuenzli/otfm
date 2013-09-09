@@ -212,7 +212,9 @@ val decoder_src : decoder -> src
     These functions can be used in any order and are robust: when
     they return an error the decoder is back to a consistant state and
     can be used further. However if {!flavour} or {!table_list} returns
-    an error you can safely assume that all other functions will. *)
+    an error you can safely assume that all other functions will. The fields
+    are in general not documented please refer to the OpenType specification
+    for details. *)
 
 type flavour = [ `TTF | `CFF ]
 (** The type for OpenType flavours. *)
@@ -270,7 +272,7 @@ type head =
   { head_font_revision : int32;
     head_flags : int;
     head_units_per_em : int; 
-    head_created : float; (** Unix timestamp. *) 
+    head_created : float;  (** Unix timestamp. *) 
     head_modified : float; (** Unix timestamp. *) 
     head_xmin : int; 
     head_ymin : int; 
@@ -283,7 +285,26 @@ type head =
     {{:http://www.microsoft.com/typography/otspec/head.htm}head} tables. *)
 
 val head : decoder -> [ `Ok of head | `Error of error ]
-(** [head d] is the result of deocding the head table. *)
+(** [head d] is the head table. *)
+
+(** {2:hhea hhea table} *)
+
+type hhea = 
+  { hhea_ascender : int; 
+    hhea_descender : int; 
+    hhea_line_gap : int; 
+    hhea_advance_width_max : int; 
+    hhea_min_left_side_bearing : int; 
+    hhea_min_right_side_bearing : int; 
+    hhea_xmax_extent : int;
+    hhea_caret_slope_rise : int; 
+    hhea_caret_slope_run : int; 
+    hhea_caret_offset : int; }
+(** The type for 
+    {{:http://www.microsoft.com/typography/otspec/hhea.htm}hhea} tables. *)
+
+val hhea : decoder -> [ `Ok of hhea | `Error of error ] 
+(** [hhea d] is the hhea table. *)
 
 (** {1:limitations Limitations} 
 

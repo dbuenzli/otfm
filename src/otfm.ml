@@ -491,6 +491,40 @@ let head d =
         head_modified; head_xmin; head_ymin; head_xmax; head_ymax; 
         head_mac_style; head_lowest_rec_ppem; head_index_to_loc_format }
   
+(* hhea table *) 
+
+type hhea = 
+  { hhea_ascender : int; 
+    hhea_descender : int; 
+    hhea_line_gap : int; 
+    hhea_advance_width_max : int; 
+    hhea_min_left_side_bearing : int; 
+    hhea_min_right_side_bearing : int; 
+    hhea_xmax_extent : int;
+    hhea_caret_slope_rise : int; 
+    hhea_caret_slope_run : int; 
+    hhea_caret_offset : int; }
+
+let hhea d = 
+  init_decoder d >>= 
+  seek_required_table Tag.t_hhea d >>= fun () -> 
+  d_uint32 d >>= fun version -> 
+  if version <> 0x00010000l then err_version d version else 
+  d_int16  d >>= fun hhea_ascender -> 
+  d_int16  d >>= fun hhea_descender -> 
+  d_int16  d >>= fun hhea_line_gap -> 
+  d_uint16 d >>= fun hhea_advance_width_max -> 
+  d_int16  d >>= fun hhea_min_left_side_bearing -> 
+  d_int16  d >>= fun hhea_min_right_side_bearing -> 
+  d_int16  d >>= fun hhea_xmax_extent ->
+  d_int16  d >>= fun hhea_caret_slope_rise -> 
+  d_int16  d >>= fun hhea_caret_slope_run -> 
+  d_int16  d >>= fun hhea_caret_offset -> 
+  `Ok { hhea_ascender; hhea_descender; hhea_line_gap; hhea_advance_width_max; 
+        hhea_min_left_side_bearing; hhea_min_right_side_bearing; 
+        hhea_xmax_extent; hhea_caret_slope_rise; hhea_caret_slope_run; 
+        hhea_caret_offset; }
+  
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.
