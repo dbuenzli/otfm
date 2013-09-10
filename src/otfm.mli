@@ -136,6 +136,9 @@ module Tag : sig
   val to_int32 : tag -> int32 
   (** [to_int32 t] is the tag as an unsigned 32 bits integer. *)
 
+  val of_int32 : int32 -> tag
+  (** [of_int32 t] is the tag from and unsigned 32 bits integer. *)
+
   val compare : tag -> tag -> int
   (** [compare t t'] is [Pervasives.compare t t'] *)
 
@@ -352,12 +355,57 @@ val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a ->
     with [nid] the name id, lang the language tag, and [name] the UTF-8 
     encoded name value.
 
+    {b Note.} If you are looking for the postcript name use 
+    {!postscript_name}. 
+
     {b Limitations.} Lookups data only in platform ids 0, 2 and 3 (Unicode, 
     ISO and Windows) with UTF-16BE encoding and reports only the data of 
-    the first one it finds for a given name id. 
+    the first one it finds for a given name id. *)
 
-    {b Important.} If you are looking for the postcript name use 
-    {!postscript_name}. *)
+(** {2:os2 OS/2 table} *) 
+
+type os2 = 
+  { os2_x_avg_char_width : int; 
+    os2_us_weight_class : int;
+    os2_us_width_class : int;
+    os2_fs_type : int; 
+    os2_y_subscript_x_size : int; 
+    os2_y_subscript_y_size : int; 
+    os2_y_subscript_x_offset : int; 
+    os2_y_subscript_y_offset : int;
+    os2_y_superscript_x_size : int; 
+    os2_y_superscript_y_size : int; 
+    os2_y_superscript_x_offset : int; 
+    os2_y_superscript_y_offset : int;
+    os2_y_strikeout_size : int;
+    os2_y_strikeout_position : int;
+    os2_family_class : int;
+    os2_panose : string; (** 10 bytes *)
+    os2_ul_unicode_range1 : int32;
+    os2_ul_unicode_range2 : int32; 
+    os2_ul_unicode_range3 : int32; 
+    os2_ul_unicode_range4 : int32; 
+    os2_ach_vend_id : int32;
+    os2_fs_selection : int; 
+    os2_us_first_char_index : int; 
+    os2_us_last_char_index : int; 
+    os2_s_typo_ascender : int;
+    os2_s_type_descender : int; 
+    os2_s_typo_linegap : int; 
+    os2_us_win_ascent : int; 
+    os2_us_win_descent : int;
+    os2_ul_code_page_range_1 : int32 option;     
+    os2_ul_code_page_range_2 : int32 option;
+    os2_s_x_height : int option; 
+    os2_s_cap_height : int option;
+    os2_us_default_char : int option; 
+    os2_us_break_char : int option; 
+    os2_us_max_context : int option; }
+(** The type for 
+    {{:http://www.microsoft.com/typography/otspec/os2.htm}OS/2} tables. *)
+
+val os2 : decoder -> [ `Ok of os2 | `Error of error ]
+(** [os2 d] is the OS/2 table. *)
 
 (** {1:limitations Limitations} 
 

@@ -96,12 +96,62 @@ let pp_name ppf inf d =
   | `Error e -> log_err inf e 
   | `Ok () -> pp ppf ")@]"
 
+let pp_os2 ppf inf d = 
+  let pp_opt pp_v ppf = function None -> pp ppf "None" | Some v -> pp_v ppf v in
+  let pp_ouint32 ppf v = pp_opt (fun ppf v -> pp ppf "%lX" v) ppf v in
+  let pp_oint = pp_opt Format.pp_print_int in
+  pp ppf "@,@[<v1>(os2"; 
+  match Otfm.os2 d with 
+  | `Error e -> log_err inf e
+  | `Ok o ->
+      pp ppf "@,(x-avg-char-width %d)" o.Otfm.os2_x_avg_char_width;
+      pp ppf "@,(us-weight-class %d)" o.Otfm.os2_us_weight_class;
+      pp ppf "@,(us-width-class %d)" o.Otfm.os2_us_width_class;
+      pp ppf "@,(fs-type %X)" o.Otfm.os2_fs_type;
+      pp ppf "@,(y-subscript-x-size %d)" o.Otfm.os2_y_subscript_x_size;
+      pp ppf "@,(y-subscript-y-size %d)" o.Otfm.os2_y_subscript_y_size;
+      pp ppf "@,(y-subscript-x-offset %d)" o.Otfm.os2_y_subscript_x_offset;
+      pp ppf "@,(y-subscript-y-offset %d)" o.Otfm.os2_y_subscript_y_offset;
+      pp ppf "@,(y-superscript-x-size %d)" o.Otfm.os2_y_superscript_x_size;
+      pp ppf "@,(y-superscript-y-size %d)" o.Otfm.os2_y_superscript_y_size;
+      pp ppf "@,(y-superscript-x-offset %d)" o.Otfm.os2_y_superscript_x_offset;
+      pp ppf "@,(y-superscript-y-offset %d)" o.Otfm.os2_y_superscript_y_offset;
+      pp ppf "@,(y-strikeout-size %d)" o.Otfm.os2_y_strikeout_size;
+      pp ppf "@,(y-strikeout-position %d)" o.Otfm.os2_y_strikeout_position;
+      pp ppf "@,(family-class %d)" o.Otfm.os2_family_class;
+      pp ppf "@,(panose \"%s\")" (String.escaped o.Otfm.os2_panose);
+      pp ppf "@,(ul-unicode-range1 %lX)" o.Otfm.os2_ul_unicode_range1;
+      pp ppf "@,(ul-unicode-range2 %lX)" o.Otfm.os2_ul_unicode_range2;
+      pp ppf "@,(ul-unicode-range3 %lX)" o.Otfm.os2_ul_unicode_range3;
+      pp ppf "@,(ul-unicode-range4 %lX)" o.Otfm.os2_ul_unicode_range4;
+      pp ppf "@,(ach-vend-id %a)" 
+        Otfm.Tag.pp (Otfm.Tag.of_int32 o.Otfm.os2_ach_vend_id);
+      pp ppf "@,(fs-selection %X)" o.Otfm.os2_fs_selection;
+      pp ppf "@,(us-first-char-index %d)" o.Otfm.os2_us_first_char_index;
+      pp ppf "@,(us-last-char-index %d)" o.Otfm.os2_us_last_char_index;
+      pp ppf "@,(s-typo-ascender %d)" o.Otfm.os2_s_typo_ascender;
+      pp ppf "@,(s-type-descender %d)" o.Otfm.os2_s_type_descender;
+      pp ppf "@,(s-typo-linegap %d)" o.Otfm.os2_s_typo_linegap;
+      pp ppf "@,(us-win-ascent %d)" o.Otfm.os2_us_win_ascent;
+      pp ppf "@,(us-win-descent %d)" o.Otfm.os2_us_win_descent;
+      pp ppf "@,(ul-code-page-range-1 %a)" 
+        pp_ouint32 o.Otfm.os2_ul_code_page_range_1;
+      pp ppf "@,(ul-code-page-range-2 %a)" 
+        pp_ouint32 o.Otfm.os2_ul_code_page_range_2;
+      pp ppf "@,(s-x-height %a)" pp_oint o.Otfm.os2_s_x_height;
+      pp ppf "@,(s-cap-height %a)" pp_oint o.Otfm.os2_s_cap_height;
+      pp ppf "@,(us-default-char %a)" pp_oint o.Otfm.os2_us_default_char;
+      pp ppf "@,(us-break-char %a)" pp_oint o.Otfm.os2_us_break_char;
+      pp ppf "@,(us-max-context %a)" pp_oint o.Otfm.os2_us_max_context;
+      pp ppf ")@]"
+
 let pp_tables ppf inf d =
   pp_cmap ppf inf d; 
   pp_head ppf inf d;
   pp_hhea ppf inf d;
   pp_hmtx ppf inf d;
-  pp_name ppf inf d
+  pp_name ppf inf d;
+  pp_os2  ppf inf d 
  
 let pp_file ppf inf = match string_of_file inf with
 | None -> () 
@@ -134,7 +184,8 @@ let dec_file inf = match string_of_file inf with
     Otfm.head d         >>= fun _ -> 
     Otfm.hhea d         >>= fun _ -> 
     Otfm.hmtx d nop4 () >>= fun _ -> 
-    Otfm.name d nop4 () >>= fun _ -> ()
+    Otfm.name d nop4 () >>= fun _ ->
+    Otfm.os2  d         >>= fun _ -> ()
 
 let ps_file inf = match string_of_file inf with
 | None -> () 

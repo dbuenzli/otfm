@@ -111,6 +111,7 @@ module Tag = struct
     Printf.sprintf "%c%c%c%c" c0 c1 c2 c3
       
   let to_int32 x = x
+  let of_int32 x = x
   let compare : int32 -> int32 -> int = Pervasives.compare
   let pp ppf t = pp ppf "'%s'" (to_bytes t)
 end
@@ -772,7 +773,6 @@ let rec d_name_records soff ncount f acc langs seen d =
   | _ -> 
       d_name_records soff (ncount - 1) f acc langs seen d
   
-
 let name d f acc =
   init_decoder d >>= 
   seek_required_table Tag.t_name d >>= fun () -> 
@@ -786,8 +786,106 @@ let name d f acc =
   seek_pos cpos d >>= fun () ->
   d_name_records soff ncount f acc langs [] d
 
-  
-  
+(* OS/2 table *)
+
+type os2 = 
+  { os2_x_avg_char_width : int; 
+    os2_us_weight_class : int;
+    os2_us_width_class : int;
+    os2_fs_type : int; 
+    os2_y_subscript_x_size : int; 
+    os2_y_subscript_y_size : int; 
+    os2_y_subscript_x_offset : int; 
+    os2_y_subscript_y_offset : int;
+    os2_y_superscript_x_size : int; 
+    os2_y_superscript_y_size : int; 
+    os2_y_superscript_x_offset : int; 
+    os2_y_superscript_y_offset : int;
+    os2_y_strikeout_size : int;
+    os2_y_strikeout_position : int;
+    os2_family_class : int;
+    os2_panose : string; (* 10 bytes *)
+    os2_ul_unicode_range1 : int32;
+    os2_ul_unicode_range2 : int32; 
+    os2_ul_unicode_range3 : int32; 
+    os2_ul_unicode_range4 : int32; 
+    os2_ach_vend_id : int32;
+    os2_fs_selection : int; 
+    os2_us_first_char_index : int; 
+    os2_us_last_char_index : int; 
+    os2_s_typo_ascender : int;
+    os2_s_type_descender : int; 
+    os2_s_typo_linegap : int; 
+    os2_us_win_ascent : int; 
+    os2_us_win_descent : int;
+    os2_ul_code_page_range_1 : int32 option;     
+    os2_ul_code_page_range_2 : int32 option;
+    os2_s_x_height : int option; 
+    os2_s_cap_height : int option;
+    os2_us_default_char : int option; 
+    os2_us_break_char : int option; 
+    os2_us_max_context : int option; }
+      
+let os2 d = 
+  init_decoder d >>= 
+  seek_required_table Tag.t_OS_2 d >>= fun () -> 
+  d_uint16 d >>= fun version -> 
+  if version > 0x0004 then err_version d (Int32.of_int version) else
+  let opt v dec d = if version < v then `Ok None else match dec d with 
+  | `Error _ as e -> e | `Ok v -> `Ok (Some v)
+  in
+  d_int16  d >>= fun os2_x_avg_char_width ->
+  d_uint16 d >>= fun os2_us_weight_class ->
+  d_uint16 d >>= fun os2_us_width_class ->
+  d_uint16 d >>= fun os2_fs_type ->
+  d_int16  d >>= fun os2_y_subscript_x_size ->
+  d_int16  d >>= fun os2_y_subscript_y_size ->
+  d_int16  d >>= fun os2_y_subscript_x_offset ->
+  d_int16  d >>= fun os2_y_subscript_y_offset ->
+  d_int16  d >>= fun os2_y_superscript_x_size ->
+  d_int16  d >>= fun os2_y_superscript_y_size ->
+  d_int16  d >>= fun os2_y_superscript_x_offset ->
+  d_int16  d >>= fun os2_y_superscript_y_offset ->
+  d_int16  d >>= fun os2_y_strikeout_size ->
+  d_int16  d >>= fun os2_y_strikeout_position ->
+  d_int16  d >>= fun os2_family_class -> 
+  d_bytes 10 d >>= fun os2_panose ->
+  d_uint32 d >>= fun os2_ul_unicode_range1 -> 
+  d_uint32 d >>= fun os2_ul_unicode_range2 -> 
+  d_uint32 d >>= fun os2_ul_unicode_range3 -> 
+  d_uint32 d >>= fun os2_ul_unicode_range4 ->
+  d_uint32 d >>= fun os2_ach_vend_id ->
+  d_uint16 d >>= fun os2_fs_selection -> 
+  d_uint16 d >>= fun os2_us_first_char_index -> 
+  d_uint16 d >>= fun os2_us_last_char_index -> 
+  d_int16  d >>= fun os2_s_typo_ascender -> 
+  d_int16  d >>= fun os2_s_type_descender -> 
+  d_int16  d >>= fun os2_s_typo_linegap -> 
+  d_uint16 d >>= fun os2_us_win_ascent ->
+  d_uint16 d >>= fun os2_us_win_descent ->
+  opt 0x0001 d_uint32 d >>= fun os2_ul_code_page_range_1 ->  
+  opt 0x0001 d_uint32 d >>= fun os2_ul_code_page_range_2 ->
+  opt 0x0002 d_int16  d >>= fun os2_s_x_height ->
+  opt 0x0002 d_int16  d >>= fun os2_s_cap_height ->
+  opt 0x0002 d_uint16 d >>= fun os2_us_default_char -> 
+  opt 0x0002 d_uint16 d >>= fun os2_us_break_char -> 
+  opt 0x0002 d_uint16 d >>= fun os2_us_max_context ->
+  `Ok { os2_x_avg_char_width; os2_us_weight_class; os2_us_width_class;
+        os2_fs_type; os2_y_subscript_x_size; os2_y_subscript_y_size;
+        os2_y_subscript_x_offset; os2_y_subscript_y_offset;
+        os2_y_superscript_x_size; os2_y_superscript_y_size;
+        os2_y_superscript_x_offset; os2_y_superscript_y_offset;
+        os2_y_strikeout_size; os2_y_strikeout_position;
+        os2_family_class; os2_panose; os2_ul_unicode_range1;
+        os2_ul_unicode_range2; os2_ul_unicode_range3;
+        os2_ul_unicode_range4; os2_ach_vend_id; os2_fs_selection;
+        os2_us_first_char_index; os2_us_last_char_index;
+        os2_s_typo_ascender; os2_s_type_descender; os2_s_typo_linegap;
+        os2_us_win_ascent; os2_us_win_descent;
+        os2_ul_code_page_range_1; os2_ul_code_page_range_2;
+        os2_s_x_height; os2_s_cap_height; os2_us_default_char;
+        os2_us_break_char; os2_us_max_context; }
+
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.
