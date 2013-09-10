@@ -145,13 +145,33 @@ let pp_os2 ppf inf d =
       pp ppf "@,(us-max-context %a)" pp_oint o.Otfm.os2_us_max_context;
       pp ppf ")@]"
 
+let pp_kern ppf inf d =
+  let dir = function `H -> "H" | `V -> "V" in 
+  let kind = function `Kern -> "kerning" | `Min -> "minimal" in
+  let pp_kinfo ppf first i = 
+    if not first then pp ppf ")@]";
+    pp ppf "@,@[<v1>((dir %s)@,(kind %s)@,(cross-stream %b)" 
+      (dir i.Otfm.kern_dir) (kind i.Otfm.kern_kind) 
+      (i.Otfm.kern_cross_stream); 
+    `Fold, false
+  in
+  let pp_pair ppf first l r v = pp ppf "@,(%d %d %d)" l r v; first in
+  pp ppf "@,@[<v1>(kern";
+  begin match Otfm.kern d (pp_kinfo ppf) (pp_pair ppf) true with
+  | `Error e -> log_err inf e
+  | `Ok Some _ -> pp ppf ")@]"
+  | `Ok None -> ()
+  end;
+  pp ppf ")@]"
+  
 let pp_tables ppf inf d =
   pp_cmap ppf inf d; 
   pp_head ppf inf d;
   pp_hhea ppf inf d;
   pp_hmtx ppf inf d;
   pp_name ppf inf d;
-  pp_os2  ppf inf d 
+  pp_os2  ppf inf d;
+  pp_kern ppf inf d
  
 let pp_file ppf inf = match string_of_file inf with
 | None -> () 

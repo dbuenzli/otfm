@@ -228,6 +228,10 @@ let seek_required_table tag d () = match seek_table tag d () with
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
 
+(* In most table decoding cases we could actually get rid of the
+   monadic style *at each step* by checking sizes beforehand and
+   decoding once we are sure we have the right amount of data. *)
+
 let d_skip n d = 
   if miss d n then err_eoi d else 
   (d.i_pos <- d.i_pos + n; `Ok ())
@@ -445,12 +449,11 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
       with Exit -> invalid name
     in
     d_uint16 d >>= function
-    | 3 -> look_for 1 0x409 d_utf16be 
-    | 1 -> look_for 0 0 d_bytes 
+    | 3 -> look_for 1 0x409 d_utf16be
+    | 1 -> look_for 0 0 d_bytes
     | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)  
   in
   loop ncount ()
-
 
 (* cmap table *)
 
@@ -885,6 +888,58 @@ let os2 d =
         os2_ul_code_page_range_1; os2_ul_code_page_range_2;
         os2_s_x_height; os2_s_cap_height; os2_us_default_char;
         os2_us_break_char; os2_us_max_context; }
+
+(* kern table *) 
+
+type kern_info =
+  { kern_dir : [ `H | `V ]; 
+    kern_kind : [ `Min | `Kern ]; 
+    kern_cross_stream : bool; }
+                   
+let kern_info c = 
+  { kern_dir = (if c land 0x1 > 0 then `H else `V); 
+    kern_kind = (if c land 0x2 > 0 then `Min else `Kern); 
+    kern_cross_stream = c land 0x4 > 0 }
+
+let rec kern_tables ntables t p acc d = 
+  if ntables = 0 then `Ok (Some acc) else 
+  d_uint16 d >>= fun version ->
+  if version > 0 then err_version d (Int32.of_int version) else
+  d_uint16 d >>= fun len -> 
+  d_uint16 d >>= fun coverage -> 
+  let format = coverage lsr 8 in 
+  let skip acc = 
+    d_skip (len - 3 * 2) d >>= fun () -> 
+    kern_tables (ntables - 1) t p acc d
+  in
+  if format <> 0 then skip acc else 
+  match t acc (kern_info coverage) with 
+  | `Skip, acc -> skip acc
+  | `Fold, acc ->
+      let rec d_pairs len acc d = 
+        if len < 3 * 2 then d_skip len d >>= fun () -> `Ok acc else
+        d_uint16 d >>= fun left -> 
+        d_uint16 d >>= fun right -> 
+        d_int16 d >>= fun values -> 
+        d_pairs (len - 3 * 2) (p acc left right values) d
+      in
+      d_skip (4 * 2)  d >>= fun () ->
+      d_pairs len acc d >>= fun acc -> 
+      kern_tables (ntables - 1) t p acc d
+      
+let kern d t p acc = 
+  init_decoder d >>=
+  seek_table Tag.t_kern d >>= function 
+  | None -> `Ok None
+  | Some _ -> 
+      d_uint16 d >>= fun version -> 
+      if version > 0 then err_version d (Int32.of_int version) else
+      d_uint16 d >>= fun ntables ->
+      kern_tables ntables t p acc d
+      
+      
+
+
 
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.

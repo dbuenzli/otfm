@@ -7,7 +7,7 @@
 (** OpenType font decoder. 
 
     [Otfm] is an in-memory decoder for the OpenType font data format.
-    It provides low-level access to tables of OpenType fonts and functions
+    It provides low-level access to OpenType fonts tables and functions
     to decode some of them.
 
     Consult the {{!limitations}limitations} and {{!examples}example} of 
@@ -335,7 +335,7 @@ val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) ->
 (** [hmtx d f acc] folds over the horizontal metrics of the font by
     reading the
     {{:http://www.microsoft.com/typography/otspec/hmtx.htm}hmtx}
-    table.  [f] is applied on each entry with [f acc gid adv lsb] with
+    table.  [f] is applied on each entry with [f acc' gid adv lsb] with
     [gid] the glyph id, [adv] the (unsigned) advance width, and [lsb]
     the (signed) left side bearing. *)
 
@@ -351,7 +351,7 @@ val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a ->
   [ `Ok of 'a | `Error of error ]
 (** [name d f acc] folds over the name records of the font by 
     reading the {{:http://www.microsoft.com/typography/otspec/name.htm}name}
-    table. [f] is applied on each name id entry with [f acc nid lang name] 
+    table. [f] is applied on each name id entry with [f acc' nid lang name] 
     with [nid] the name id, lang the language tag, and [name] the UTF-8 
     encoded name value.
 
@@ -406,6 +406,29 @@ type os2 =
 
 val os2 : decoder -> [ `Ok of os2 | `Error of error ]
 (** [os2 d] is the OS/2 table. *)
+
+
+(** {2:kern kern table} *) 
+
+type kern_info =
+  { kern_dir : [ `H | `V ]; 
+    kern_kind : [ `Min | `Kern ]; 
+    kern_cross_stream : bool; }
+(** The type for kerning (sub)table information. *) 
+
+val kern : decoder -> 
+  ('a -> kern_info -> [`Skip | `Fold ] * 'a) -> 
+  ('a -> glyph_id -> glyph_id -> int -> 'a) -> 'a -> 
+  [ `Ok of 'a option | `Error of error ]
+(** [kern d t p acc] folds over the kerning tables of [d] by 
+    reading the {{:http://www.microsoft.com/typography/otspec/kern.htm}kern}
+    table. [t] is called on each new (sub)table, the table pairs are skipped if
+    it returns [`Skip] otherwise [p acc' left right value] is called on 
+    each kerning pair of the table. The function returns [None] if there
+    is no kern table.
+
+    {b Limitations.} Only format 0 kerning tables are supported. *)
+                                            
 
 (** {1:limitations Limitations} 
 
