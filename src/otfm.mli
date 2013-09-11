@@ -335,9 +335,10 @@ val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) ->
 (** [hmtx d f acc] folds over the horizontal metrics of the font by
     reading the
     {{:http://www.microsoft.com/typography/otspec/hmtx.htm}hmtx}
-    table.  [f] is applied on each entry with [f acc' gid adv lsb] with
-    [gid] the glyph id, [adv] the (unsigned) advance width, and [lsb]
-    the (signed) left side bearing. *)
+    table.  [f] is applied on each entry with [f acc' gid adv lsb]
+    with [gid] the glyph id (guaranteed to range, in order, from
+    [0] to glyph count minus one), [adv] the (unsigned) advance width,
+    and [lsb] the (signed) left side bearing. *)
 
 (** {2:name name table} *)
 
@@ -443,8 +444,7 @@ val kern : decoder ->
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font 
        files tend to be smaller than 16 Mo).}
-    {- Table checksums are not verified.}
-    {- See also the table decoding functions for other limitations.}}
+    {- Table checksums are not verified.}}
 *)
 
 (** {1:examples Examples} *)
