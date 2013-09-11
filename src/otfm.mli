@@ -229,16 +229,16 @@ val decoder_src : decoder -> src
 type flavour = [ `TTF | `CFF ]
 (** The type for OpenType flavours. *)
 
-val flavour : decoder -> [`Ok of flavour | `Error of error ]
+val flavour : decoder -> [> `Ok of flavour | `Error of error ]
 (** [decode_flavour d] is the flavour of the font decoded by [d]. *)
 
-val table_list : decoder -> [ `Ok of tag list | `Error of error ]
+val table_list : decoder -> [> `Ok of tag list | `Error of error ]
 (** [table_list t] is the list of tables of the font decoded by [d]. *)
 
-val table_mem : decoder -> tag -> [ `Ok of bool | `Error of error ] 
+val table_mem : decoder -> tag -> [> `Ok of bool | `Error of error ] 
 (** [table_mem d t] is [true] if table [t] is in the font decoded by [d]. *)
 
-val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
+val table_raw : decoder -> tag -> [> `Ok of string option | `Error of error ]
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
@@ -246,10 +246,10 @@ val table_raw : decoder -> tag -> [`Ok of string option | `Error of error ]
 
     These functions lookup data in the right table. *)
 
-val glyph_count : decoder -> [ `Ok of int | `Error of error ]
+val glyph_count : decoder -> [> `Ok of int | `Error of error ]
 (** [glyph_count d] is the number of glyphs in the font (bounded by [65535]). *)
 
-val postscript_name : decoder -> [ `Ok of string option | `Error of error ] 
+val postscript_name : decoder -> [> `Ok of string option | `Error of error ] 
 (** [poscript_name d] is the PostScript name of [d]. Looks up and validates
     as mandated by the OTF standard, don't rely on {!name} if you really
     need this information. *)
@@ -270,7 +270,7 @@ type map_kind = [ `Glyph | `Glyph_range ]
        and [u1] to [gid + (u1 - u0)]}} *)
 
 val cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) -> 
-  'a -> [ `Ok of (int * int * int) * 'a | `Error of error ]
+  'a -> [> `Ok of (int * int * int) * 'a | `Error of error ]
 (** [cmap d f acc] folds over a mapping from unicode
     scalar values to glyph ids by reading the 
     {{:http://www.microsoft.com/typography/otspec/cmap.htm}cmap} table.
@@ -306,7 +306,7 @@ type head =
 (** The type for representing 
     {{:http://www.microsoft.com/typography/otspec/head.htm}head} tables. *)
 
-val head : decoder -> [ `Ok of head | `Error of error ]
+val head : decoder -> [> `Ok of head | `Error of error ]
 (** [head d] is the head table. *)
 
 (** {2:hhea hhea table} *)
@@ -325,13 +325,13 @@ type hhea =
 (** The type for 
     {{:http://www.microsoft.com/typography/otspec/hhea.htm}hhea} tables. *)
 
-val hhea : decoder -> [ `Ok of hhea | `Error of error ] 
+val hhea : decoder -> [> `Ok of hhea | `Error of error ] 
 (** [hhea d] is the hhea table. *)
 
 (** {2:hmtx hmtx table} *)
 
 val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) -> 
-  'a -> [ `Ok of 'a | `Error of error ]
+  'a -> [> `Ok of 'a | `Error of error ]
 (** [hmtx d f acc] folds over the horizontal metrics of the font by
     reading the
     {{:http://www.microsoft.com/typography/otspec/hmtx.htm}hmtx}
@@ -349,7 +349,7 @@ type lang = string
     returns lowercased tags. *) 
 
 val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a -> 
-  [ `Ok of 'a | `Error of error ]
+  [> `Ok of 'a | `Error of error ]
 (** [name d f acc] folds over the name records of the font by 
     reading the {{:http://www.microsoft.com/typography/otspec/name.htm}name}
     table. [f] is applied on each name id entry with [f acc' nid lang name] 
@@ -405,7 +405,7 @@ type os2 =
 (** The type for 
     {{:http://www.microsoft.com/typography/otspec/os2.htm}OS/2} tables. *)
 
-val os2 : decoder -> [ `Ok of os2 | `Error of error ]
+val os2 : decoder -> [> `Ok of os2 | `Error of error ]
 (** [os2 d] is the OS/2 table. *)
 
 
@@ -420,7 +420,7 @@ type kern_info =
 val kern : decoder -> 
   ('a -> kern_info -> [`Skip | `Fold ] * 'a) -> 
   ('a -> glyph_id -> glyph_id -> int -> 'a) -> 'a -> 
-  [ `Ok of 'a option | `Error of error ]
+  [> `Ok of 'a option | `Error of error ]
 (** [kern d t p acc] folds over the kerning tables of [d] by 
     reading the {{:http://www.microsoft.com/typography/otspec/kern.htm}kern}
     table. [t] is called on each new (sub)table, the table pairs are skipped if
