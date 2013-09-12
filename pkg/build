@@ -18,7 +18,7 @@ add lib src/otfm.a
 add lib src/otfm.cmxa
 add lib src/otfm.cmxs
 
-add bin test/otfpp
+add bin test/otftrip
 
 add doc README.md
 add doc CHANGES.md

@@ -14,7 +14,7 @@ Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>
 
 ## Installation
 
-Otfm can be install with `opam`:
+Otfm can be installed with `opam`:
 
     opam install opam
 
@@ -35,11 +35,11 @@ distribution.
 Sample programs are located in the `test` directory of the
 distribution. They can be built with:
 
-    ocamlbuild test/tests.otarget 
+    ocamlbuild tests.otarget 
     
 The resulting binaries are in `_build/test`:
 
 - `test.byte` tests the library, nothing should fail.
-- `otfpp.native`, pretty prints OpenType files invoke with `--help`
-  for more information.
-
+- `otftrip.native`, among other things, reads an OpenType file and
+  prints a human readable representation on `stdout`. Invoke with
+  `-help` for more information.
