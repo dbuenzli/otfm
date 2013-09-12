@@ -245,7 +245,7 @@ let ps_file inf = match string_of_file inf with
 let main () = 
   let usage = Printf.sprintf 
     "Usage: %s [OPTION]... [OTFFILE]...\n\
-    \ Print human readable OpenType file font information on stdout.\n\
+     Print human readable OpenType file font information on stdout.\n\
     Options:" exec 
   in
   let cmd = ref `Pp in 
