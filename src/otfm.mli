@@ -6,6 +6,8 @@
 
 (** OpenType font decoder. 
 
+    {b WARNING.} This interface is subject to change in the future.
+
     [Otfm] is an in-memory decoder for the OpenType font data format.
     It provides low-level access to OpenType fonts tables and functions
     to decode some of them.
@@ -447,7 +449,22 @@ val kern : decoder ->
     {- Table checksums are not verified.}}
 *)
 
-(** {1:examples Examples} *)
+(** {1:examples Examples} 
+
+    The following code prints the postscript name of the font 
+    on stdout.
+{[
+  let otf_postscript_name bytes = 
+    let d = Otfm.decoder (`String bytes) in
+    match Otfm.postscript_name d with 
+    | `Error e -> Format.eprintf "@[%a@]@." Otfm.pp_error e
+    | `Ok (Some n) -> Format.printf "%s@." n;
+    | `Ok None -> ()
+]}
+
+*)
+
+
 
 
 (*---------------------------------------------------------------------------

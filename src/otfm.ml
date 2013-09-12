@@ -936,10 +936,6 @@ let kern d t p acc =
       d_uint16 d >>= fun ntables ->
       kern_tables ntables t p acc d
       
-      
-
-
-
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.
