@@ -16,39 +16,38 @@ let test_tag_constants () =
     if Otfm.Tag.compare t (Otfm.Tag.of_bytes str) <> 0 
     then fail "Wrong constant for '%s' tag" str
   in
-  test Otfm.Tag.t_cmap "cmap";
-  test Otfm.Tag.t_head "head";
-  test Otfm.Tag.t_hhea "hhea";
-  test Otfm.Tag.t_hmtx "hmtx";
-  test Otfm.Tag.t_maxp "maxp";
-  test Otfm.Tag.t_name "name";
-  test Otfm.Tag.t_OS_2 "OS/2";
-  test Otfm.Tag.t_post "post";
-  test Otfm.Tag.t_cvt  "cvt ";
-  test Otfm.Tag.t_fpgm "fpgm";
-  test Otfm.Tag.t_glyf "glyf";
-  test Otfm.Tag.t_loca "loca";
-  test Otfm.Tag.t_prep "prep";
-  test Otfm.Tag.t_CFF  "CFF ";
-  test Otfm.Tag.t_VORG "VORG";
-  test Otfm.Tag.t_EBDT "EBDT";
-  test Otfm.Tag.t_EBLC "EBLC";
-  test Otfm.Tag.t_EBSC "EBSC";
-  test Otfm.Tag.t_DSIG "DSIG";
-  test Otfm.Tag.t_gasp "gasp";
-  test Otfm.Tag.t_hdmx "hdmx";
-  test Otfm.Tag.t_kern "kern";
-  test Otfm.Tag.t_LTSH "LTSH";
-  test Otfm.Tag.t_PCLT "PCLT";
-  test Otfm.Tag.t_VDMX "VDMX";
-  test Otfm.Tag.t_vhea "vhea";
-  test Otfm.Tag.t_vmtx "vmtx";
-  test Otfm.Tag.t_BASE "BASE";
-  test Otfm.Tag.t_GDEF "GDEF";
-  test Otfm.Tag.t_GPOS "GPOS";
-  test Otfm.Tag.t_GSUB "GSUB";
-  test Otfm.Tag.t_JSTF "JSTF"
-
+  test Otfm.Tag.cmap "cmap";
+  test Otfm.Tag.head "head";
+  test Otfm.Tag.hhea "hhea";
+  test Otfm.Tag.hmtx "hmtx";
+  test Otfm.Tag.maxp "maxp";
+  test Otfm.Tag.name "name";
+  test Otfm.Tag.os2  "OS/2";
+  test Otfm.Tag.post "post";
+  test Otfm.Tag.cvt  "cvt ";
+  test Otfm.Tag.fpgm "fpgm";
+  test Otfm.Tag.glyf "glyf";
+  test Otfm.Tag.loca "loca";
+  test Otfm.Tag.prep "prep";
+  test Otfm.Tag.cff  "CFF ";
+  test Otfm.Tag.vorg "VORG";
+  test Otfm.Tag.ebdt "EBDT";
+  test Otfm.Tag.eblc "EBLC";
+  test Otfm.Tag.ebsc "EBSC";
+  test Otfm.Tag.dsig "DSIG";
+  test Otfm.Tag.gasp "gasp";
+  test Otfm.Tag.hdmx "hdmx";
+  test Otfm.Tag.kern "kern";
+  test Otfm.Tag.ltsh "LTSH";
+  test Otfm.Tag.pclt "PCLT";
+  test Otfm.Tag.vdmx "VDMX";
+  test Otfm.Tag.vhea "vhea";
+  test Otfm.Tag.vmtx "vmtx";
+  test Otfm.Tag.base "BASE";
+  test Otfm.Tag.gdef "GDEF";
+  test Otfm.Tag.gpos "GPOS";
+  test Otfm.Tag.gsub "GSUB";
+  test Otfm.Tag.jstf "JSTF"
 
 let test () =
   Printexc.record_backtrace true; 
