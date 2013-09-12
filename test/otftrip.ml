@@ -165,7 +165,7 @@ let pp_kern ppf has_kern d =
   pp ppf "@,@[<v1>(kern";
   match Otfm.kern d (pp_kinfo ppf) (pp_pair ppf) true with
   | `Error _ as e -> e
-  | `Ok _ -> pp ppf ")@]"; `Ok ()
+  | `Ok _ -> pp ppf ")@])@]"; `Ok ()
   
 let pp_tables ppf inf ts d =
   let err = ref false in
@@ -180,7 +180,7 @@ let pp_tables ppf inf ts d =
   pp_cmap ppf d >>= fun () ->
   pp_hmtx ppf d >>= fun () ->
   pp_kern ppf (List.mem Otfm.Tag.kern ts) d >>= fun () ->
-  if !err then `Ok () else (`Error `Reported)
+  if !err then (`Error `Reported) else `Ok ()
                            
 (* Commands *) 
                            
