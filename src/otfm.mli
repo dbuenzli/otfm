@@ -42,86 +42,86 @@ module Tag : sig
 
   (** {2:req Required tables} *)
 
-  val t_cmap : tag 
+  val cmap : tag 
   (** The {{:http://www.microsoft.com/typography/otspec/cmap.htm}cmap} table. *)
-  val t_head : tag
+  val head : tag
   (** The {{:http://www.microsoft.com/typography/otspec/head.htm}head} table. *)
-  val t_hhea : tag
+  val hhea : tag
   (** The {{:http://www.microsoft.com/typography/otspec/hhea.htm}hhea} table. *)
-  val t_hmtx : tag
+  val hmtx : tag
   (** The {{:http://www.microsoft.com/typography/otspec/hmtx.htm}hmtx} table. *)
-  val t_maxp : tag
+  val maxp : tag
   (** The {{:http://www.microsoft.com/typography/otspec/maxp.htm}maxp} table. *)
-  val t_name : tag
+  val name : tag
   (** The {{:http://www.microsoft.com/typography/otspec/name.htm}name} table. *)
-  val t_OS_2 : tag
+  val os2 : tag
   (** The {{:http://www.microsoft.com/typography/otspec/os2.htm}os2} table. *)
-  val t_post : tag
+  val post : tag
   (** The {{:http://www.microsoft.com/typography/otspec/post.htm}post} table. *)
     
   (** {2 TTF font tables} *)
 
-  val t_cvt  : tag
+  val cvt  : tag
   (** The {{:http://www.microsoft.com/typography/otspec/cvt.htm}cvt} table. *)
-  val t_fpgm : tag
+  val fpgm : tag
   (** The {{:http://www.microsoft.com/typography/otspec/fpgm.htm}fpgm} table. *)
-  val t_glyf : tag
+  val glyf : tag
   (** The {{:http://www.microsoft.com/typography/otspec/glyf.htm}glyf} table. *)
-  val t_loca : tag
+  val loca : tag
   (** The {{:http://www.microsoft.com/typography/otspec/loca.htm}loca} table. *)
-  val t_prep : tag
+  val prep : tag
   (** The {{:http://www.microsoft.com/typography/otspec/prep.htm}prep} table. *)
 
   (** {2 CFF font tables} *) 
     
-  val t_CFF  : tag
+  val cff  : tag
   (** The {{:http://www.microsoft.com/typography/otspec/cff.htm}CFF} table. *)
-  val t_VORG : tag
+  val vorg : tag
   (** The {{:http://www.microsoft.com/typography/otspec/vorg.htm}VORG} table. *)
     
   (** {2 Bitmap glyph tables} *)
     
-  val t_EBDT : tag
+  val ebdt : tag
   (** The {{:http://www.microsoft.com/typography/otspec/ebdt.htm}EBDT} table. *)
 
-  val t_EBLC : tag
+  val eblc : tag
   (** The {{:http://www.microsoft.com/typography/otspec/eblc.htm}EBLC} table. *)
 
-  val t_EBSC : tag
+  val ebsc : tag
   (** The {{:http://www.microsoft.com/typography/otspec/ebsc.htm}EBSC} table. *)
     
   (** {2 Optional tables} *)
     
-  val t_DSIG : tag
+  val dsig : tag
   (** The {{:http://www.microsoft.com/typography/otspec/dsig.htm}DSIG} table. *)
-  val t_gasp : tag
+  val gasp : tag
   (** The {{:http://www.microsoft.com/typography/otspec/gasp.htm}gasp} table. *)
-  val t_hdmx : tag
+  val hdmx : tag
   (** The {{:http://www.microsoft.com/typography/otspec/hdmx.htm}hdmx} table. *)
-  val t_kern : tag
+  val kern : tag
   (** The {{:http://www.microsoft.com/typography/otspec/kern.htm}kern} table. *)
-  val t_LTSH : tag
+  val ltsh : tag
   (** The {{:http://www.microsoft.com/typography/otspec/ltsh.htm}LTSH} table. *)
-  val t_PCLT : tag
+  val pclt : tag
   (** The {{:http://www.microsoft.com/typography/otspec/pclt.htm}PCLT} table. *)
-  val t_VDMX : tag
+  val vdmx : tag
   (** The {{:http://www.microsoft.com/typography/otspec/vdmx.htm}VDMX} table. *)
-  val t_vhea : tag
+  val vhea : tag
   (** The {{:http://www.microsoft.com/typography/otspec/vhea.htm}vhea} table. *)
-  val t_vmtx : tag
+  val vmtx : tag
   (** The {{:http://www.microsoft.com/typography/otspec/vmtx.htm}vmtx} table. *)
 
   (** {2 Advanced typographic tables} *)
 
-  val t_BASE : tag
+  val base : tag
   (** The {{:http://www.microsoft.com/typography/otspec/base.htm}BASE} table. *)
-  val t_GDEF : tag
+  val gdef : tag
   (** The {{:http://www.microsoft.com/typography/otspec/gdef.htm}GDEF} table. *)
-  val t_GPOS : tag
+  val gpos : tag
   (** The {{:http://www.microsoft.com/typography/otspec/gpos.htm}GPOS} table. *)
-  val t_GSUB : tag
+  val gsub : tag
   (** The {{:http://www.microsoft.com/typography/otspec/gsub.htm}GSUB} table. *)
-  val t_JSTF : tag
+  val jstf : tag
   (** The {{:http://www.microsoft.com/typography/otspec/jstf.htm}JSTF} table. *)
 
   (** {1 Functions} *)

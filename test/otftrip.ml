@@ -179,7 +179,7 @@ let pp_tables ppf inf ts d =
   pp_os2  ppf d >>= fun () ->
   pp_cmap ppf d >>= fun () ->
   pp_hmtx ppf d >>= fun () ->
-  pp_kern ppf (List.mem Otfm.Tag.t_kern ts) d >>= fun () ->
+  pp_kern ppf (List.mem Otfm.Tag.kern ts) d >>= fun () ->
   if !err then `Ok () else (`Error `Reported)
                            
 (* Commands *) 

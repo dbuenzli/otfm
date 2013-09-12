@@ -44,56 +44,55 @@ module Tag = struct
 
   (* Required common tables tags *)
 
-  let t_cmap = 0x636D6170l
-  let t_head = 0x68656164l
-  let t_hhea = 0x68686561l
-  let t_hmtx = 0x686D7478l
-  let t_maxp = 0x6D617870l
-  let t_name = 0x6E616D65l
-  let t_OS_2 = 0x4F532F32l
-  let t_post = 0x706F7374l
+  let cmap = 0x636D6170l
+  let head = 0x68656164l
+  let hhea = 0x68686561l
+  let hmtx = 0x686D7478l
+  let maxp = 0x6D617870l
+  let name = 0x6E616D65l
+  let os2  = 0x4F532F32l
+  let post = 0x706F7374l
 
-  let t_common =
-    [ t_cmap; t_head; t_hhea; t_hmtx; t_maxp; t_name; t_OS_2; t_post ]
+  let t_common = [ cmap; head; hhea; hmtx; maxp; name; os2; post ]
 
   (* TTF font table tags *)
 
-  let t_cvt  = 0x63767420l
-  let t_fpgm = 0x6670676Dl
-  let t_glyf = 0x676C7966l
-  let t_loca = 0x6C6F6361l
-  let t_prep = 0x70726570l
+  let cvt  = 0x63767420l
+  let fpgm = 0x6670676Dl
+  let glyf = 0x676C7966l
+  let loca = 0x6C6F6361l
+  let prep = 0x70726570l
 
   (* CFF font table tags *) 
 
-  let t_CFF  = 0x43464620l
-  let t_VORG = 0x564F5247l
+  let cff  = 0x43464620l
+  let vorg = 0x564F5247l
 
   (* Bitmap glyph tables *)
 
-  let t_EBDT = 0x45424454l
-  let t_EBLC = 0x45424C43l
-  let t_EBSC = 0x45425343l
+  let ebdt = 0x45424454l
+  let eblc = 0x45424C43l
+  let ebsc = 0x45425343l
 
   (* Optional tables. *)
 
-  let t_DSIG = 0x44534947l
-  let t_gasp = 0x67617370l
-  let t_hdmx = 0x68646D78l
-  let t_kern = 0x6B65726El
-  let t_LTSH = 0x4C545348l
-  let t_PCLT = 0x50434C54l
-  let t_VDMX = 0x56444D58l
-  let t_vhea = 0x76686561l
-  let t_vmtx = 0x766D7478l
+  let dsig = 0x44534947l
+  let gasp = 0x67617370l
+  let hdmx = 0x68646D78l
+  let kern = 0x6B65726El
+  let ltsh = 0x4C545348l
+  let pclt = 0x50434C54l
+  let vdmx = 0x56444D58l
+  let vhea = 0x76686561l
+  let vmtx = 0x766D7478l
 
   (* Advanced Open Type font layout tables *)
 
-  let t_BASE = 0x42415345l
-  let t_GDEF = 0x47444546l
-  let t_GPOS = 0x47504F53l
-  let t_GSUB = 0x47535542l
-  let t_JSTF = 0x4A535446l
+  let base = 0x42415345l
+  let gdef = 0x47444546l
+  let gpos = 0x47504F53l
+  let gsub = 0x47535542l
+  let jstf = 0x4A535446l
 
   (* Functions *)
 
@@ -410,14 +409,14 @@ let table_raw d tag =
         
 let glyph_count d = 
   init_decoder d >>=
-  seek_required_table Tag.t_maxp d >>= fun () -> 
+  seek_required_table Tag.maxp d >>= fun () -> 
   d_skip 4 d >>= fun () -> 
   d_uint16 d >>= fun count -> 
   `Ok count
 
 let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
   init_decoder d >>=
-  seek_required_table Tag.t_name d >>= fun () -> 
+  seek_required_table Tag.name d >>= fun () -> 
   d_uint16 d >>= fun version -> 
   if version < 0 || version > 1 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun ncount ->
@@ -554,7 +553,7 @@ let select_cmap cmaps =
 
 let cmap d f acc = 
   init_decoder d >>= 
-  seek_required_table Tag.t_cmap d >>= fun () ->
+  seek_required_table Tag.cmap d >>= fun () ->
   d_uint16 d >>= fun version ->                           (* cmap header. *)
   if version <> 0 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun count ->                               (* numTables. *)
@@ -587,7 +586,7 @@ type head =
     
 let head d = 
   init_decoder d >>= 
-  seek_required_table Tag.t_head d >>= fun () -> 
+  seek_required_table Tag.head d >>= fun () -> 
   d_uint32 d >>= fun version -> 
   if version <> 0x00010000l then err_version d version else 
   d_uint32 d >>= fun head_font_revision -> 
@@ -624,7 +623,7 @@ type hhea =
 
 let hhea d = 
   init_decoder d >>= 
-  seek_required_table Tag.t_hhea d >>= fun () -> 
+  seek_required_table Tag.hhea d >>= fun () -> 
   d_uint32 d >>= fun version -> 
   if version <> 0x00010000l then err_version d version else 
   d_int16  d >>= fun hhea_ascender -> 
@@ -645,7 +644,7 @@ let hhea d =
 (* hmtx table *) 
 
 let d_hm_count d = 
-  seek_required_table Tag.t_hhea d () >>= fun () -> 
+  seek_required_table Tag.hhea d () >>= fun () -> 
   d_skip (4 + 15 * 2) d >>= fun () -> 
   d_uint16            d >>= fun hm_count -> 
   `Ok hm_count
@@ -666,7 +665,7 @@ let rec d_hlsb goffset i f acc adv d =
 let hmtx d f acc =
   glyph_count d >>= fun glyph_count ->
   d_hm_count  d >>= fun hm_count ->
-  seek_required_table Tag.t_hmtx d () >>= fun () ->
+  seek_required_table Tag.hmtx d () >>= fun () ->
   d_hmetric hm_count hm_count f acc (-1) d >>= fun (acc, last_adv) -> 
   d_hlsb glyph_count (glyph_count - hm_count) f acc last_adv d
 
@@ -778,7 +777,7 @@ let rec d_name_records soff ncount f acc langs seen d =
   
 let name d f acc =
   init_decoder d >>= 
-  seek_required_table Tag.t_name d >>= fun () -> 
+  seek_required_table Tag.name d >>= fun () -> 
   d_uint16 d >>= fun version -> 
   if version < 0 || version > 1 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun ncount ->
@@ -831,7 +830,7 @@ type os2 =
       
 let os2 d = 
   init_decoder d >>= 
-  seek_required_table Tag.t_OS_2 d >>= fun () -> 
+  seek_required_table Tag.os2 d >>= fun () -> 
   d_uint16 d >>= fun version -> 
   if version > 0x0004 then err_version d (Int32.of_int version) else
   let opt v dec d = if version < v then `Ok None else match dec d with 
@@ -929,7 +928,7 @@ let rec kern_tables ntables t p acc d =
       
 let kern d t p acc = 
   init_decoder d >>=
-  seek_table Tag.t_kern d >>= function 
+  seek_table Tag.kern d >>= function 
   | None -> `Ok acc
   | Some _ -> 
       d_uint16 d >>= fun version -> 
