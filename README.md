@@ -3,8 +3,8 @@ Otfm — OpenType font decoder for OCaml
 Release %%VERSION%%
 
 Otfm is an in-memory decoder for the OpenType font data format. It
-provides low-level access to tables of OpenType fonts and functions to
-decode some of them.
+provides low-level access to font tables and functions to decode some
+of them.
    
 Otfm is made of a single, independent module and is distributed under
 a BSD3 license.
