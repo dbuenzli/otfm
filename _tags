@@ -1,4 +1,3 @@
-<true> : package(gg)
 <**/*.{ml,mli}> : annot
 <src> : include
 <test> : include
