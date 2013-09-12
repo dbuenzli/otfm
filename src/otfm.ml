@@ -902,7 +902,7 @@ let kern_info c =
     kern_cross_stream = c land 0x4 > 0 }
 
 let rec kern_tables ntables t p acc d = 
-  if ntables = 0 then `Ok (Some acc) else 
+  if ntables = 0 then `Ok acc else 
   d_uint16 d >>= fun version ->
   if version > 0 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun len -> 
@@ -930,7 +930,7 @@ let rec kern_tables ntables t p acc d =
 let kern d t p acc = 
   init_decoder d >>=
   seek_table Tag.t_kern d >>= function 
-  | None -> `Ok None
+  | None -> `Ok acc
   | Some _ -> 
       d_uint16 d >>= fun version -> 
       if version > 0 then err_version d (Int32.of_int version) else

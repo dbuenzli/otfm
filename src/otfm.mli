@@ -420,12 +420,12 @@ type kern_info =
 val kern : decoder -> 
   ('a -> kern_info -> [`Skip | `Fold ] * 'a) -> 
   ('a -> glyph_id -> glyph_id -> int -> 'a) -> 'a -> 
-  [> `Ok of 'a option | `Error of error ]
+  [> `Ok of 'a | `Error of error ]
 (** [kern d t p acc] folds over the kerning tables of [d] by 
     reading the {{:http://www.microsoft.com/typography/otspec/kern.htm}kern}
     table. [t] is called on each new (sub)table, the table pairs are skipped if
     it returns [`Skip] otherwise [p acc' left right value] is called on 
-    each kerning pair of the table. The function returns [None] if there
+    each kerning pair of the table. The function returns [acc] if there
     is no kern table.
 
     {b Limitations.} Only format 0 kerning tables are supported. *)
