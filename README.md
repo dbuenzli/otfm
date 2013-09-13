@@ -5,9 +5,11 @@ Release %%VERSION%%
 Otfm is an in-memory decoder for the OpenType font data format. It
 provides low-level access to font tables and functions to decode some
 of them.
-   
-Otfm is made of a single, independent module and is distributed under
-a BSD3 license.
+
+Otfm is made of a single module and depends on [Uutf][1]. It is distributed 
+under the BSD3 license.
+
+[1]: http://erratique.ch/software/uutf
      
 Home page: http://erratique.ch/software/otfm  
 Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>
@@ -16,7 +18,7 @@ Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>
 
 Otfm can be installed with `opam`:
 
-    opam install opam
+    opam install otfm
 
 If you don't use `opam` consult the [`opam`](opam) file for build
 instructions and a complete specification of the dependencies. 

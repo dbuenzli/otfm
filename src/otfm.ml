@@ -13,7 +13,7 @@ let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s
    If you don't believe the author's invariants, replacing with safe
    versions makes everything safe in the module. He won't be
    upset. *)
-
+    
 let unsafe_chr = Char.unsafe_chr
 let unsafe_byte s j = Char.code (String.get s j)
 
@@ -30,9 +30,10 @@ let rec pp_list ?(pp_sep = Format.pp_print_cut) pp_v ppf = function
 (* OpenType tags *)
 
 type tag = int32
+
 module Tag = struct 
   type t = tag
-
+    
   (* Table tags *)
 
   (* OpenType version tags. *)
@@ -85,9 +86,9 @@ module Tag = struct
   let vdmx = 0x56444D58l
   let vhea = 0x76686561l
   let vmtx = 0x766D7478l
-
+    
   (* Advanced Open Type font layout tables *)
-
+    
   let base = 0x42415345l
   let gdef = 0x47444546l
   let gpos = 0x47504F53l
@@ -122,12 +123,12 @@ type cp_range = cp * cp
 let is_cp i = 0x0000 <= i && i <= 0x10FFFF
 let is_scalar_value i = 
   (0x0000 <= i && i <= 0xD7FF) || (0xE000 <= i && i <= 0x10FFFF)
-  
+                                  
 let pp_cp ppf cp =
   if cp < 0 || cp > 0x10FFFF then pp ppf "U+Invalid(%X)" cp else
   if cp <= 0xFFFF then pp ppf "U+%04X" cp else 
   pp ppf "U+%X" cp
-
+    
 (* Decode *)
 
 type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
@@ -147,12 +148,12 @@ let pp_ctx ppf = function
 | `Table tag -> pp ppf "table %a" Tag.pp tag
 | `Offset_table -> pp ppf "offset table"
 | `Table_directory -> pp ppf "table directory"
-
+                        
 let pp_error ppf = function 
 | `Unknown_flavour tag -> 
     pp ppf "@[Unknown@ OpenType@ flavour (%a)@]" Tag.pp tag
 | `Missing_required_table tag -> 
-     pp ppf "@[Missing@ required@ table (%a)@]" Tag.pp tag
+    pp ppf "@[Missing@ required@ table (%a)@]" Tag.pp tag
 | `Unsupported_TTC ->
     pp ppf "@[True@ Type@ collections (TTC)@ are@ not@ supported@]"
 | `Unsupported_cmaps maps -> 
@@ -170,12 +171,12 @@ let pp_error ppf = function
 | `Invalid_postscript_name n -> 
     pp ppf "@[Invalid@ PostScript@ name (%s)@]" (String.escaped n)
 | `Unexpected_eoi ctx -> 
-    pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx;
-
+    pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx
+    
 (* N.B. Offsets and lengths are decoded as OCaml ints. On 64 bits
    platforms they fit, on 32 bits we are limited by string size
    anyway. *)
-
+      
 type flavour = [ `TTF | `CFF ]
 type src = [ `String of string ] 
 type decoder =
@@ -208,7 +209,7 @@ let miss d count = d.i_max - d.i_pos + 1 < count
 let raw_byte d =
   let j = d.i_pos in
   d.i_pos <- d.i_pos + 1; (unsafe_byte d.i j) 
-  
+                          
 let cur_pos d = d.i_pos
 let seek_pos pos d =
   if pos > d.i_max then err (`Invalid_offset (d.ctx, pos)) else 
@@ -221,20 +222,16 @@ let seek_table tag d () =
     if pos > d.i_max then err (`Invalid_offset (`Table tag, pos)) else
     (set_ctx d (`Table tag); d.t_pos <- pos; d.i_pos <- pos; `Ok (Some len))
   with Not_found -> `Ok None
-  
+                      
 let seek_required_table tag d () = match seek_table tag d () with 
 | `Ok (Some _) -> `Ok ()
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
-
-(* In most table decoding cases we could actually get rid of the
-   monadic style *at each step* by checking sizes beforehand and
-   decoding once we are sure we have the right amount of data. *)
-
+    
 let d_skip n d = 
   if miss d n then err_eoi d else 
   (d.i_pos <- d.i_pos + n; `Ok ())
-
+  
 let d_bytes len d = 
   if miss d len then err_eoi d else 
   begin 
@@ -242,7 +239,7 @@ let d_bytes len d =
     for i = 1 to len do Buffer.add_char d.buf (unsafe_chr (raw_byte d)) done; 
     `Ok (Buffer.contents d.buf)
   end
-
+  
 let d_uint8 d = if miss d 1 then err_eoi d else `Ok (raw_byte d)
 let d_int8 d = match d_uint8 d with
 | `Ok i -> `Ok (if i > 0x7F then i - 0x100 else i)
@@ -253,7 +250,7 @@ let d_uint16 d =
   let b0 = raw_byte d in
   let b1 = raw_byte d in 
   `Ok ((b0 lsl 8) lor b1)
-
+    
 let d_int16 d = match d_uint16 d with
 | `Ok i -> `Ok (if i > 0x7FFF then i - 0x10000 else i) 
 | `Error _ as e -> e
@@ -264,7 +261,7 @@ let d_uint24 d =
   let b1 = raw_byte d in 
   let b2 = raw_byte d in 
   `Ok ((b0 lsl 16) lor (b1 lsl 8) lor b2)
-
+    
 let d_uint32 d = 
   if miss d 4 then err_eoi d else
   let b0 = raw_byte d in let b1 = raw_byte d in 
@@ -272,7 +269,7 @@ let d_uint32 d =
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (Int32.logor (Int32.shift_left s0 16) s1)
-
+    
 let d_uint32_int d =
   if miss d 4 then err_eoi d else
   let b0 = raw_byte d in let b1 = raw_byte d in 
@@ -280,7 +277,7 @@ let d_uint32_int d =
   let s0 = (b0 lsl 8) lor b1 in 
   let s1 = (b2 lsl 8) lor b3 in 
   `Ok ((s0 lsl 16) lor s1)
-
+    
 let d_time d =                       (* LONGDATETIME as a unix time stamp. *)
   if miss d 8 then err_eoi d else 
   let b0 = raw_byte d in let b1 = raw_byte d in 
@@ -297,7 +294,7 @@ let d_time d =                       (* LONGDATETIME as a unix time stamp. *)
   in
   let unix_epoch = 2_082_844_800L (* in seconds since 1904-01-01 00:00:00 *) in
   `Ok (Int64.to_float (Int64.sub v unix_epoch))
-
+    
 let d_fixed d = 
   if miss d 4 then err_eoi d else
   let b0 = raw_byte d in let b1 = raw_byte d in
@@ -305,56 +302,19 @@ let d_fixed d =
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (s0, s1)
-
+    
 let u_rep = 0xFFFD                                 (* replacement character. *)
-let d_utf16be len (* in bytes *) d =     (* UTF functions adapted from Uutf. *)
-  let add_utf_8 u =
-    let w byte = Buffer.add_char d.buf (unsafe_chr byte) in
-    if u <= 0x007F then (w u)
-    else if u <= 0x07FF then begin 
-      w (0xC0 lor (u lsr 6)); 
-      w (0x80 lor (u land 0x3F))
-    end else if u <= 0xFFFF then begin
-      w (0xE0 lor (u lsr 12));
-      w (0x80 lor ((u lsr 6) land 0x3F));
-      w (0x80 lor (u land 0x3F))
-    end else begin 
-      w (0xF0 lor (u lsr 18));
-      w (0x80 lor ((u lsr 12) land 0x3F));
-      w (0x80 lor ((u lsr 6) land 0x3F));
-      w (0x80 lor (u land 0x3F))
-    end
-  in
-  let r_utf_16 () =                          (* May return a high surrogate. *)
-    let b0 = raw_byte d in 
-    let b1 = raw_byte d in
-    let u = (b0 lsl 8) lor b1 in
-    if u < 0xD800 || u > 0xDFFF then `Uchar u else
-    if u > 0xDBFF then (* malformed *) `Uchar u_rep else `Hi u 
-  in
-  let r_utf_16_lo hi =                (* Combines [hi] with a low surrogate. *)
-    let b0 = raw_byte d in
-    let b1 = raw_byte d in 
-    let lo = (b0 lsl 8) lor b1 in
-    if lo < 0xDC00 || lo > 0xDFFF 
-    then (* malformed *) u_rep 
-    else ((((hi land 0x3FF) lsl 10) lor (lo land 0x3FF)) + 0x10000)
-  in
-  let ret () = `Ok (Buffer.contents d.buf) in
-  let rec loop i l =                               (* man this loop is ugly. *) 
-    if i = l then ret () else
-    let rem = l - i in
-    if rem < 2 then (* malformed *) (add_utf_8 u_rep; ret ()) else 
-    match r_utf_16 () with 
-    | `Uchar u -> add_utf_8 u; loop (i + 2) l 
-    | `Hi hi ->
-        if rem < 4 then (* malformed *) (add_utf_8 u_rep; ret ()) else
-        (add_utf_8 (r_utf_16_lo hi); loop (i + 4) l)
-  in
-  Buffer.clear d.buf;
-  if miss d len then err_eoi d else
-  loop 0 len
-
+let d_utf_16be len (* in bytes *) d =            (* returns an UTF-8 string. *) 
+  match d_bytes len d with
+  | `Error _ as e ->  e
+  | `Ok s -> 
+      let rec add_utf_8 b i = function
+      | `Malformed _ -> add_utf_8 b i (`Uchar Uutf.u_rep) 
+      | `Uchar u -> Uutf.Buffer.add_utf_8 b u; b
+      in
+      Buffer.clear d.buf;
+      `Ok (Buffer.contents (Uutf.String.fold_utf_16be add_utf_8 d.buf s))
+    
 let rec d_table_records d count = 
   if count = 0 then (d.state <- `Ready; `Ok ()) else
   d_uint32     d >>= fun tag ->
@@ -363,21 +323,21 @@ let rec d_table_records d count =
   d_uint32_int d >>= fun len -> 
   d.tables <- (tag, off, len) :: d.tables;
   d_table_records d (count - 1)
-
+    
 let d_version d = 
   d_uint32 d >>= function
   | t when t = Tag.v_OTTO -> d.flavour <- `CFF; `Ok ()
   | t when (t = Tag.v_true || t = 0x00010000l) -> d.flavour <- `TTF; `Ok ()
   | t when t = Tag.v_ttcf -> `Error `Unsupported_TTC
   | t -> `Error (`Unknown_flavour t)
-
+           
 let d_structure d =                   (* offset table and table directory. *)
   d_version      d >>= fun () ->                          (* offset table. *)
   d_uint16       d >>= fun count ->                          (* numTables. *)
   d_skip (3 * 2) d >>= fun () ->
   set_ctx d `Table_directory;                          (* table directory. *)
   d_table_records d count   
-
+    
 let init_decoder d = match d.state with
 | `Ready -> `Ok ()
 | `Fatal e -> `Error e 
@@ -385,17 +345,17 @@ let init_decoder d = match d.state with
     match d_structure d with
     | `Ok () as ok -> ok 
     | `Error e -> err_fatal d e
-
+                    
 let flavour d = init_decoder d >>= fun () -> `Ok d.flavour
-
+    
 let table_list d = 
   let tags d = List.rev_map (fun (t, _, _) -> t) d.tables in
   init_decoder d >>= fun () -> `Ok (tags d)
-
+    
 let table_mem d tag = 
   let exists_tag tag d = List.exists (fun (t, _, _) -> tag = t) d.tables in
   init_decoder d >>= fun () -> `Ok (exists_tag tag d)
-
+    
 let table_raw d tag = 
   init_decoder   d >>= 
   seek_table tag d >>= fun len -> 
@@ -404,7 +364,7 @@ let table_raw d tag =
   | Some len -> 
       if d.i_pos + len > d.i_max then err_eoi d else
       `Ok (Some (String.sub d.i d.i_pos len))
-
+        
 (* convenience *)
         
 let glyph_count d = 
@@ -413,7 +373,7 @@ let glyph_count d =
   d_skip 4 d >>= fun () -> 
   d_uint16 d >>= fun count -> 
   `Ok count
-
+    
 let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
   init_decoder d >>=
   seek_required_table Tag.name d >>= fun () -> 
@@ -448,21 +408,21 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
       with Exit -> invalid name
     in
     d_uint16 d >>= function
-    | 3 -> look_for 1 0x409 d_utf16be
+    | 3 -> look_for 1 0x409 d_utf_16be
     | 1 -> look_for 0 0 d_bytes
     | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)  
   in
   loop ncount ()
-
+    
 (* cmap table *)
-
+    
 type glyph_id = int
 type map_kind = [ `Glyph | `Glyph_range ]
-
+                
 let rec d_array el count i a d = 
   if i = count then `Ok a else
   el d >>= fun v -> a.(i) <- v; d_array el count (i + 1) a d
-
+    
 let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
   let garray_pos = cur_pos d in
   let rec loop acc i = 
@@ -502,7 +462,7 @@ let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
     end
   in
   loop acc 0
-
+    
 let d_cmap_4 cmap d f acc () =
   d_skip (3 * 2) d >>= fun () ->
   d_uint16       d >>= fun count2 -> 
@@ -515,7 +475,7 @@ let d_cmap_4 cmap d f acc () =
   d_array d_int16  count 0 (a ()) d >>= fun delta -> 
   d_array d_uint16 count 0 (a ()) d >>= fun offset ->
   d_cmap_4_ranges cmap d f acc u0s u1s delta offset count
-
+    
 let rec d_cmap_groups cmap d count f kind acc =
   if count = 0 then `Ok (cmap, acc) else
   d_uint32_int d >>= fun u0 -> if not (is_cp u0) then err (`Invalid_cp u0) else 
@@ -523,15 +483,15 @@ let rec d_cmap_groups cmap d count f kind acc =
   if u0 > u1 then err (`Invalid_cp_range (u0, u1)) else
   d_uint32_int d >>= fun gid -> 
   d_cmap_groups cmap d (count - 1) f kind (f acc kind (u0, u1) gid)
-
+    
 let d_cmap_seg cmap kind d f acc () = 
   d_skip (2 * 2 + 2 * 4) d >>= fun () ->
   d_uint32_int           d >>= fun count ->
   d_cmap_groups cmap d count f kind acc
-
+    
 let d_cmap_12 cmap d f acc () = d_cmap_seg cmap `Glyph_range d f acc ()
 let d_cmap_13 cmap d f acc () = d_cmap_seg cmap `Glyph d f acc ()
-
+    
 let rec d_cmap_records d count acc = 
   if count = 0 then `Ok acc else
   d_uint16           d >>= fun pid ->
@@ -542,7 +502,7 @@ let rec d_cmap_records d count acc =
   d_uint16           d >>= fun fmt -> 
   seek_pos cur       d >>= fun () ->
   d_cmap_records d (count - 1) ((pos, pid, eid, fmt) :: acc)
-
+    
 let select_cmap cmaps =
   let rec loop f sel = function 
   | (_, _, _, (4 | 12 | 13 as f') as c) :: cs when f' > f -> loop f (Some c) cs
@@ -550,7 +510,7 @@ let select_cmap cmaps =
   | _ :: cs -> loop f sel cs
   in
   loop min_int None cmaps
-
+    
 let cmap d f acc = 
   init_decoder d >>= 
   seek_required_table Tag.cmap d >>= fun () ->
@@ -567,9 +527,9 @@ let cmap d f acc =
       | 4 -> d_cmap_4 | 12 -> d_cmap_12 | 13 -> d_cmap_13 | _ -> assert false
       in
       seek_table_pos pos d >>= cmap (pid, eid, fmt) d f acc
-
+        
 (* head table *) 
-
+        
 type head = 
   { head_font_revision : int32;
     head_flags : int;
@@ -583,7 +543,7 @@ type head =
     head_mac_style : int; 
     head_lowest_rec_ppem : int;
     head_index_to_loc_format : int; }
-    
+  
 let head d = 
   init_decoder d >>= 
   seek_required_table Tag.head d >>= fun () -> 
@@ -640,37 +600,37 @@ let hhea d =
         hhea_min_left_side_bearing; hhea_min_right_side_bearing; 
         hhea_xmax_extent; hhea_caret_slope_rise; hhea_caret_slope_run; 
         hhea_caret_offset; }
-
+    
 (* hmtx table *) 
-
+    
 let d_hm_count d = 
   seek_required_table Tag.hhea d () >>= fun () -> 
   d_skip (4 + 15 * 2) d >>= fun () -> 
   d_uint16            d >>= fun hm_count -> 
   `Ok hm_count
-
+    
 let rec d_hmetric goffset i f acc last_adv d = 
   if i = 0 then `Ok (acc, last_adv) else
   d_uint16 d >>= fun adv ->
   d_int16  d >>= fun lsb ->
   let acc' = f acc (goffset - i) adv lsb in
   d_hmetric goffset (i - 1) f acc' adv d
-
+    
 let rec d_hlsb goffset i f acc adv d = 
   if i = 0 then `Ok acc else 
   d_int16 d >>= fun lsb -> 
   let acc' = f acc (goffset - i) adv lsb in
   d_hlsb goffset (i - 1) f acc' adv d
-
+    
 let hmtx d f acc =
   glyph_count d >>= fun glyph_count ->
   d_hm_count  d >>= fun hm_count ->
   seek_required_table Tag.hmtx d () >>= fun () ->
   d_hmetric hm_count hm_count f acc (-1) d >>= fun (acc, last_adv) -> 
   d_hlsb glyph_count (glyph_count - hm_count) f acc last_adv d
-
+    
 (* name table *) 
-
+    
 (* Source: https://skia.googlecode.com/svn/trunk/src/sfnt/SkOTTable_name.cpp 
    BSD3 licensed (c) 2011 Google Inc. *)
 let lcid_to_bcp47 = [
@@ -735,7 +695,7 @@ let lcid_to_bcp47 = [
   0x540a, "es-us"; ]
 
 type lang = string
-
+  
 let rec d_name_langs soff ncount d = 
   d_skip (ncount * 6 * 2) d >>= fun () -> 
   d_uint16                d >>= fun lcount -> 
@@ -745,12 +705,12 @@ let rec d_name_langs soff ncount d =
     d_uint16 d >>= fun off ->
     let cpos = cur_pos d in 
     seek_table_pos (soff + off) d >>= fun () -> 
-    d_utf16be len d >>= fun lang -> 
+    d_utf_16be len d >>= fun lang -> 
     seek_pos cpos d >>= fun () ->
     loop (i - 1) ((0x8000 + (ncount - i), lang) :: acc)
   in
   loop ncount [] 
-
+    
 let rec d_name_records soff ncount f acc langs seen d =
   if ncount = 0 then `Ok acc else
   d_uint16 d >>= fun pid -> 
@@ -767,14 +727,14 @@ let rec d_name_records soff ncount f acc langs seen d =
       then d_name_records soff (ncount - 1) f acc langs seen d 
       else
       seek_table_pos (soff + off) d >>= fun () -> 
-      d_utf16be len d >>= fun v -> 
-      seek_pos cpos d >>= fun () ->
+      d_utf_16be len d >>= fun v -> 
+      seek_pos cpos  d >>= fun () ->
       let lang = try List.assoc lid langs with Not_found -> "und" in
       let acc' = f acc nid lang v in 
       d_name_records soff (ncount - 1) f acc' langs (n :: seen) d
   | _ -> 
       d_name_records soff (ncount - 1) f acc langs seen d
-  
+        
 let name d f acc =
   init_decoder d >>= 
   seek_required_table Tag.name d >>= fun () -> 
@@ -787,9 +747,9 @@ let name d f acc =
   let langs = List.rev_append langs lcid_to_bcp47 in 
   seek_pos cpos d >>= fun () ->
   d_name_records soff ncount f acc langs [] d
-
+    
 (* OS/2 table *)
-
+    
 type os2 = 
   { os2_x_avg_char_width : int; 
     os2_us_weight_class : int;
@@ -827,7 +787,7 @@ type os2 =
     os2_us_default_char : int option; 
     os2_us_break_char : int option; 
     os2_us_max_context : int option; }
-      
+  
 let os2 d = 
   init_decoder d >>= 
   seek_required_table Tag.os2 d >>= fun () -> 
@@ -925,7 +885,7 @@ let rec kern_tables ntables t p acc d =
       d_skip (4 * 2)  d >>= fun () ->
       d_pairs len acc d >>= fun acc -> 
       kern_tables (ntables - 1) t p acc d
-      
+        
 let kern d t p acc = 
   init_decoder d >>=
   seek_table Tag.kern d >>= function 
@@ -935,7 +895,7 @@ let kern d t p acc =
       if version > 0 then err_version d (Int32.of_int version) else
       d_uint16 d >>= fun ntables ->
       kern_tables ntables t p acc d
-      
+        
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.
