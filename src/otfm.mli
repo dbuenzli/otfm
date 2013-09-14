@@ -171,17 +171,6 @@ val is_cp : int -> bool
 (** [is_cp i] is [true] if [i] is an 
     Unicode {{:http://unicode.org/glossary/#code_point}code point}. *)
 
-val is_scalar_value : int -> bool
-(** [is_scalar_value i] is [true] if [i] is an Unicode
-    {{:http://unicode.org/glossary/#unicode_scalar_value} scalar
-    value}. *)
-
-val pp_cp : Format.formatter -> int -> unit
-(** [pp_cp ppf i] prints a textual representation of the
-    {{:http://unicode.org/glossary/#code_point}code point} [i] on
-    [ppf]. If [i] is not a valid code point ["U+Invalid(X)"] is
-    printed where [X] is the hexadecimal integer value. *)
-
 (** {1 Decode} *)
 
 type error_ctx =

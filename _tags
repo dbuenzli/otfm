@@ -3,4 +3,4 @@
 <test> : include
 
 <src/otfm.{mli,ml}> : package(uutf)
-<test/otftrip.{byte,native}> : package(uutf)
+<test/otftrip.{mli,ml,byte,native}> : package(uutf)

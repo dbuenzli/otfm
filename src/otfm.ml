@@ -121,14 +121,7 @@ end
 type cp = int 
 type cp_range = cp * cp
 let is_cp i = 0x0000 <= i && i <= 0x10FFFF
-let is_scalar_value i = 
-  (0x0000 <= i && i <= 0xD7FF) || (0xE000 <= i && i <= 0x10FFFF)
-                                  
-let pp_cp ppf cp =
-  if cp < 0 || cp > 0x10FFFF then pp ppf "U+Invalid(%X)" cp else
-  if cp <= 0xFFFF then pp ppf "U+%04X" cp else 
-  pp ppf "U+%X" cp
-    
+                                      
 (* Decode *)
 
 type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
@@ -165,9 +158,10 @@ let pp_error ppf = function
 | `Invalid_offset (ctx, o) -> 
     pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
 | `Invalid_cp u -> 
-    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
+    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" Uutf.pp_cp u
 | `Invalid_cp_range (u0, u1) -> 
-    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
+    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" 
+      Uutf.pp_cp u0 Uutf.pp_cp u1
 | `Invalid_postscript_name n -> 
     pp ppf "@[Invalid@ PostScript@ name (%s)@]" (String.escaped n)
 | `Unexpected_eoi ctx -> 
