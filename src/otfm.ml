@@ -4,7 +4,7 @@
    %%NAME%% release %%VERSION%%
   ---------------------------------------------------------------------------*)
 
-(* Invalid_arg strings *)
+(* Error strings *)
 
 let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s
 
@@ -15,13 +15,11 @@ let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s
    upset. *)
     
 let unsafe_chr = Char.unsafe_chr
-let unsafe_byte s j = Char.code (String.get s j)
+let unsafe_byte s j = Char.code (String.unsafe_get s j)
 
 (* Pretty printers *)
 
 let pp = Format.fprintf 
-let pp_string = Format.pp_print_string
-let pp_space = Format.pp_print_space
 let rec pp_list ?(pp_sep = Format.pp_print_cut) pp_v ppf = function 
 | [] -> ()
 | v :: vs -> 
@@ -34,8 +32,6 @@ type tag = int32
 module Tag = struct 
   type t = tag
     
-  (* Table tags *)
-
   (* OpenType version tags. *)
 
   let v_wOFF = 0x774F4646l
@@ -163,7 +159,7 @@ let pp_error ppf = function
     pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" 
       Uutf.pp_cp u0 Uutf.pp_cp u1
 | `Invalid_postscript_name n -> 
-    pp ppf "@[Invalid@ PostScript@ name (%s)@]" (String.escaped n)
+    pp ppf "@[Invalid@ PostScript@ name (%S)@]" n
 | `Unexpected_eoi ctx -> 
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx
     
@@ -200,10 +196,6 @@ let err_version d v = `Error (`Unknown_version (d.ctx, v))
 let err_fatal d e = d.state <- `Fatal e; `Error e
 let set_ctx d ctx = d.ctx <- ctx
 let miss d count = d.i_max - d.i_pos + 1 < count
-let raw_byte d =
-  let j = d.i_pos in
-  d.i_pos <- d.i_pos + 1; (unsafe_byte d.i j) 
-                          
 let cur_pos d = d.i_pos
 let seek_pos pos d =
   if pos > d.i_max then err (`Invalid_offset (d.ctx, pos)) else 
@@ -221,18 +213,19 @@ let seek_required_table tag d () = match seek_table tag d () with
 | `Ok (Some _) -> `Ok ()
 | `Ok None -> err (`Missing_required_table tag)
 | `Error _ as e -> e
-    
-let d_skip n d = 
-  if miss d n then err_eoi d else 
-  (d.i_pos <- d.i_pos + n; `Ok ())
+
+let d_skip len d = 
+  if miss d len then err_eoi d else 
+  (d.i_pos <- d.i_pos + len; `Ok ())
+
+let raw_byte d =
+  let j = d.i_pos in
+  d.i_pos <- d.i_pos + 1; (unsafe_byte d.i j) 
   
 let d_bytes len d = 
-  if miss d len then err_eoi d else 
-  begin 
-    Buffer.clear d.buf; 
-    for i = 1 to len do Buffer.add_char d.buf (unsafe_chr (raw_byte d)) done; 
-    `Ok (Buffer.contents d.buf)
-  end
+  if miss d len then err_eoi d else
+  let start = d.i_pos in
+  (d.i_pos <- d.i_pos + len; `Ok (String.sub d.i start len))
   
 let d_uint8 d = if miss d 1 then err_eoi d else `Ok (raw_byte d)
 let d_int8 d = match d_uint8 d with
@@ -297,7 +290,6 @@ let d_fixed d =
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (s0, s1)
     
-let u_rep = 0xFFFD                                 (* replacement character. *)
 let d_utf_16be len (* in bytes *) d =            (* returns an UTF-8 string. *) 
   match d_bytes len d with
   | `Error _ as e ->  e
@@ -333,7 +325,7 @@ let d_structure d =                   (* offset table and table directory. *)
   d_table_records d count   
     
 let init_decoder d = match d.state with
-| `Ready -> `Ok ()
+| `Ready -> d.ctx <- `Table_directory; `Ok ()
 | `Fatal e -> `Error e 
 | `Start -> 
     match d_structure d with
@@ -352,12 +344,9 @@ let table_mem d tag =
     
 let table_raw d tag = 
   init_decoder   d >>= 
-  seek_table tag d >>= fun len -> 
-  match len with 
+  seek_table tag d >>= function
   | None -> `Ok None 
-  | Some len -> 
-      if d.i_pos + len > d.i_max then err_eoi d else
-      `Ok (Some (String.sub d.i d.i_pos len))
+  | Some len -> d_bytes len d >>= fun bytes -> `Ok (Some bytes)
         
 (* convenience *)
         
@@ -372,7 +361,7 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
   init_decoder d >>=
   seek_required_table Tag.name d >>= fun () -> 
   d_uint16 d >>= fun version -> 
-  if version < 0 || version > 1 then err_version d (Int32.of_int version) else
+  if version > 1 then err_version d (Int32.of_int version) else
   d_uint16 d >>= fun ncount ->
   d_uint16 d >>= fun soff -> 
   let rec loop ncount () = 
@@ -430,7 +419,7 @@ let d_cmap_4_ranges cmap d f acc u0s u1s delta offset count =       (* ugly. *)
     if offset = 0 then begin
       (* The arithmetic must be performed mod 65536, this is problematic
          for Otfm's interface semantics. We need to split the range 
-         if the the glyph range spans the bounds. *)
+         if the glyph range spans the bounds. *)
       let g0 = u0 + delta in 
       let g1 = u1 + delta in 
       if g0 < 0 && g1 >= 0 then  

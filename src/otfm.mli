@@ -15,8 +15,8 @@
     Consult the {{!limitations}limitations} and {{!examples}example} of 
     use. 
 
-    {b Note.} Unless otherwise noted the strings returned are UTF-8 
-    encoded.
+    {b Note.} Unless otherwise specified the strings returned are
+    UTF-8 encoded.
 
     {e Release %%VERSION%% — %%MAINTAINER%% }
     {3 References}
@@ -155,7 +155,7 @@ end
     code points} to be mapped to glyphs. Hence we deal with Unicode
     {{:http://unicode.org/glossary/#code_point}code points} not
     {{:http://unicode.org/glossary/#unicode_scalar_value} scalar
-    value}. *)
+    values}. *)
 
 type cp = int 
 (** The type for Unicode 
@@ -210,12 +210,13 @@ val decoder_src : decoder -> src
 
 (** {1 Table decoding} 
 
-    These functions can be used in any order and are robust: when
-    they return an error the decoder is back to a consistant state and
-    can be used further. However if {!flavour} or {!table_list} returns
-    an error you can safely assume that all other functions will. The fields
-    are in general not documented please refer to the OpenType specification
-    for details. *)
+    These functions can be used in any order and are robust: when they
+    return an error the decoder is back to a consistant state and can
+    be used further. However if {!flavour} or {!table_list} returns an
+    error you can safely assume that all other functions will. The
+    fields are in general not documented please refer to the OpenType
+    {{:http://www.microsoft.com/typography/otspec/default.htm}
+    specification} for details. *)
 
 type flavour = [ `TTF | `CFF ]
 (** The type for OpenType flavours. *)
@@ -248,7 +249,7 @@ val postscript_name : decoder -> [> `Ok of string option | `Error of error ]
 (** {2:cmap cmap table} *)
 
 type glyph_id = int
-(** The type for glyph ids. From [0] to [65534]*)
+(** The type for glyph ids, from [0] to [65534]. *)
 
 type map_kind = [ `Glyph | `Glyph_range ]
 (** The type for map kinds. 
@@ -265,7 +266,7 @@ val cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
 (** [cmap d f acc] folds over a mapping from unicode
     scalar values to glyph ids by reading the 
     {{:http://www.microsoft.com/typography/otspec/cmap.htm}cmap} table.
-    The triple of integer indicates the platform id, encoding
+    The returned triple of integer indicates the platform id, encoding
     id and format of the cmap used.
         
     {b Limitations.} Only the format 13 (last resort font), format 12
@@ -334,10 +335,7 @@ val hmtx : decoder -> ('a -> glyph_id -> int -> int -> 'a) ->
 (** {2:name name table} *)
 
 type lang = string
-(** The type for {{:http://tools.ietf.org/html/bcp47}BCP 47} language tags. 
-
-    {b Note.} The module normalizes Windows language ids to BCP 47 and 
-    returns lowercased tags. *) 
+(** The type for {{:http://tools.ietf.org/html/bcp47}BCP 47} language tags. *)
 
 val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a -> 
   [> `Ok of 'a | `Error of error ]
@@ -347,7 +345,11 @@ val name : decoder -> ('a -> int -> lang -> string -> 'a) -> 'a ->
     with [nid] the name id, lang the language tag, and [name] the UTF-8 
     encoded name value.
 
-    {b Note.} If you are looking for the postcript name use 
+    {b Note.} The module normalizes Windows language ids to lowercased
+    BCP 47 ids. Language tags found in language tag records should be
+    BCP 47 language tags but are not checked for conformance.
+
+    {b Tip.} If you are looking for the postcript name use 
     {!postscript_name}. 
 
     {b Limitations.} Lookups data only in platform ids 0, 2 and 3 (Unicode, 
