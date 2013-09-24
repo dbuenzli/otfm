@@ -12,7 +12,3 @@ build:
   ["./pkg/pkg-git" ] 
   ["./pkg/build" "true" ]
 ]
-build-test:
-[
-  ["./pkg/test"]
-]
