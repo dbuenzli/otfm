@@ -1,6 +1,9 @@
-<**/*.{ml,mli}> : annot
+<**/*.{ml,mli}> : bin_annot, annot
 <src> : include
 <test> : include
 
 <src/otfm.{mli,ml}> : package(uutf)
+
+<test/test.{mli,ml,byte,native}> : package(uutf)
+<test/examples.{mli,ml,byte,native}> : package(uutf)
 <test/otftrip.{mli,ml,byte,native}> : package(uutf)
