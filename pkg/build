@@ -11,6 +11,7 @@ NATIVE=$1
 
 add lib pkg/META		
 add lib src/otfm.mli	
+add lib src/otfm.cmti	
 add lib src/otfm.cmi
 add lib src/otfm.cmx
 add lib src/otfm.cma
