@@ -48,7 +48,54 @@ let pp_cmap ppf d =
       pp ppf "@,@[<1>(source@ (platform-id %d)@ (encoding-id %d)\
               @ (format %d))@])@]" pid eid fmt; 
       `Ok ()
-        
+
+let pp_glyf ppf has_glyf d =
+  if not has_glyf then `Ok () else
+  let pp_bbox ppf (minx, miny, maxx, maxy) = 
+    pp ppf "@[(bbox@ %d@ %d@ %d@ %d)@]" minx miny maxx maxy
+  in
+  let pp_contour ppf pts =
+    let rec pp_pts ppf = function 
+    | [] -> pp ppf ")@]"
+    | (b, x, y) :: pts -> pp ppf "@,@[<1>(pt@ %b %d %d)@]" b x y; pp_pts ppf pts
+    in
+    pp ppf "@,@[<v1>(contour%a" pp_pts pts 
+  in
+  let pp_simple ppf gid cs bbox = 
+    pp ppf "@,@[<v1>(glyph-simple %d %a" gid pp_bbox bbox; 
+    List.iter (pp_contour ppf) cs; 
+    pp ppf ")@]"
+  in
+  let pp_matrix ppf m = match m with 
+  | None -> () 
+  | Some (a, b, c, d) -> pp ppf "@ @[<1>(ltr %g %g %g %g)@]" a b c d
+  in
+  let pp_component ppf (gid, (dx, dy), m) = 
+    pp ppf "@,@[(component %d @[(move@ %d %d)@]%a)@]" gid dx dy pp_matrix m
+  in
+  let pp_composite ppf gid cs bbox = 
+    pp ppf "@,@[<v1>(glyph-composite %d %a" gid pp_bbox bbox; 
+    List.iter (pp_component ppf) cs; 
+    pp ppf ")@]"
+  in
+  match Otfm.glyph_count d with 
+  | `Error _ as e -> e 
+  | `Ok gc -> 
+      pp ppf "@,@[<v1>(glyf";
+      let rec loop gid = 
+        if gid >= gc then (pp ppf "@]"; `Ok ()) else 
+        match Otfm.loca d gid with 
+        | `Error _ as e -> e 
+        | `Ok None -> pp ppf "@,@[(glyph-no-outline %d)@]" gid; loop (gid + 1)
+        | `Ok (Some gloc) -> 
+            match Otfm.glyf d gloc with
+            | `Error _ as e -> e
+            | `Ok (`Simple cs, bb) -> pp_simple ppf gid cs bb; loop (gid + 1)
+            | `Ok (`Composite cs, bb) -> 
+                pp_composite ppf gid cs bb; loop (gid + 1)
+      in
+      loop 0 
+
 let pp_head ppf d = 
   pp ppf "@,@[<v1>(head"; 
   match Otfm.head d with 
@@ -179,6 +226,7 @@ let pp_tables ppf inf ts d =
   pp_os2  ppf d >>= fun () ->
   pp_cmap ppf d >>= fun () ->
   pp_hmtx ppf d >>= fun () ->
+  pp_glyf ppf (List.mem Otfm.Tag.glyf ts) d >>= fun () ->
   pp_kern ppf (List.mem Otfm.Tag.kern ts) d >>= fun () ->
   if !err then (`Error `Reported) else `Ok ()
                            

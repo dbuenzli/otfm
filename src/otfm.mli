@@ -181,8 +181,11 @@ type error = [
   | `Unknown_flavour of tag 
   | `Unsupported_TTC
   | `Unsupported_cmaps of (int * int * int) list
+  | `Unsupported_glyf_matching_points
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
+  | `Unknown_loca_format of error_ctx * int
+  | `Unknown_composite_format of error_ctx * int
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
@@ -280,6 +283,33 @@ val cmap : decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
     is returned with the list of platform id, encoding id, format
     available in the font. *)
 
+(** {2:glyf glyf table} *)
+
+type glyf_loc 
+(** The type for glyph locations. See {!loca} table. *) 
+
+type glyph_simple_descr = (bool * int * int) list list 
+(** The type for simple glyph descriptions. Lists of contours, contours
+    are list of points with a boolean indicating whether the point is 
+    on or off curve. *)
+
+type glyph_composite_descr =
+  (glyph_id * (int * int) * (float * float * float * float) option) list
+(** The type for glyph composites. A list of components made of 
+    a glyph id, a translation and an optional linear transform [a b c d]
+    (column major). *) 
+
+type glyph_descr = 
+  [ `Simple of glyph_simple_descr 
+  | `Composite of glyph_composite_descr ] * (int * int * int * int)
+(** The type for glyph descriptions. A simple or composite descriptions 
+    with the glyph's [(minx, miny, maxx, maxy)]'s bounding box. *) 
+
+val glyf : decoder -> glyf_loc -> [> `Ok of glyph_descr | `Error of error ] 
+(** [glyf d loc] is the glyph descroption located at [loc] by reading
+    the {{:http://www.microsoft.com/typography/otspec/glyf.htm}glyf}
+    table. Glyph locations are obtainted via {!loca}. *) 
+     
 (** {2:head head table} *)
 
 type head = 
@@ -401,7 +431,6 @@ type os2 =
 val os2 : decoder -> [> `Ok of os2 | `Error of error ]
 (** [os2 d] is the OS/2 table. *)
 
-
 (** {2:kern kern table} *) 
 
 type kern_info =
@@ -422,7 +451,13 @@ val kern : decoder ->
     is no kern table.
 
     {b Limitations.} Only format 0 kerning tables are supported. *)
-                                            
+
+(** {2:loca loca table} *) 
+
+val loca : decoder -> glyph_id -> [> `Ok of glyf_loc option | `Error of error ] 
+(** [loca d gid] looks up the location of the glyph with id [gid] by
+    reading the {{:http://www.microsoft.com/typography/otspec/loca.htm}loca}
+    table. The result can be used with {!val:glyf} to lookup the glyph. *)
 
 (** {1:limitations Limitations} 
 

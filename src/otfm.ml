@@ -125,8 +125,11 @@ type error = [
   | `Unknown_flavour of tag
   | `Unsupported_TTC
   | `Unsupported_cmaps of (int * int * int) list
+  | `Unsupported_glyf_matching_points
   | `Missing_required_table of tag
   | `Unknown_version of error_ctx * int32
+  | `Unknown_loca_format of error_ctx * int
+  | `Unknown_composite_format of error_ctx * int
   | `Invalid_offset of error_ctx * int
   | `Invalid_cp of int
   | `Invalid_cp_range of int * int
@@ -149,8 +152,14 @@ let pp_error ppf = function
     let pp_sep ppf () = pp ppf ",@ " in 
     let pp_map ppf (pid, eid, fmt) = pp ppf "(%d,%d,%d)" pid eid fmt in
     pp ppf "@[All@ cmaps:@ %a@ are@ unsupported@]" (pp_list ~pp_sep pp_map) maps
+| `Unsupported_glyf_matching_points ->
+    pp ppf "@[Unsupported@ glyf@ matching@ points)@]"
 | `Unknown_version (ctx, v) -> 
     pp ppf "@[Unknown@ version (%lX)@ in@ %a@]" v pp_ctx ctx 
+| `Unknown_loca_format (ctx, v) ->
+    pp ppf "@[Unknown@ loca table format (%d)@ in@ %a@]" v pp_ctx ctx
+| `Unknown_composite_format (ctx, v) ->
+    pp ppf "@[Unknown@ composite glyph format (%d)@ in@ %a@]" v pp_ctx ctx
 | `Invalid_offset (ctx, o) -> 
     pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
 | `Invalid_cp u -> 
@@ -169,6 +178,10 @@ let pp_error ppf = function
       
 type flavour = [ `TTF | `CFF ]
 type src = [ `String of string ] 
+
+(* TODO maybe it would be better not to maintain t_pos/i_pos, 
+   but rather pass them as arguments to decoding functions. *) 
+
 type decoder =
   { mutable i : string;                                       (* input data. *)
     mutable i_pos : int;                          (* input current position. *)
@@ -178,6 +191,9 @@ type decoder =
     mutable ctx : error_ctx;                   (* the current error context. *)
     mutable flavour : [ `TTF | `CFF ];                   (* decoded flavour. *)
     mutable tables : (tag * int * int) list;       (* decoded table records. *)
+    mutable loca_pos : int;                    (* for `TTF fonts, lazy init. *)
+    mutable loca_format : int;                 (* for `TTF fonts, lazy init. *)
+    mutable glyf_pos : int;                    (* for `TTF fonts, lazy init. *)
     mutable buf : Buffer.t; }                            (* internal buffer. *) 
   
 let decoder_src d = (`String d.i)
@@ -187,12 +203,15 @@ let decoder src =
   in 
   { i; i_pos; i_max; t_pos = 0; 
     state = `Start; ctx = `Offset_table; flavour = `TTF; tables = []; 
+    loca_pos = -1; loca_format = -1; glyf_pos = -1;
     buf = Buffer.create 253; }
   
 let ( >>= ) x f = match x with `Ok v -> f v | `Error _ as e -> e
 let err e = `Error e
 let err_eoi d = `Error (`Unexpected_eoi d.ctx)
 let err_version d v = `Error (`Unknown_version (d.ctx, v))
+let err_loca_format d v = `Error (`Unknown_loca_format (d.ctx, v))
+let err_composite_format d v = `Error (`Unknown_composite_format (d.ctx, v))
 let err_fatal d e = d.state <- `Fatal e; `Error e
 let set_ctx d ctx = d.ctx <- ctx
 let miss d count = d.i_max - d.i_pos + 1 < count
@@ -289,7 +308,11 @@ let d_fixed d =
   let s0 = Int32.of_int ((b0 lsl 8) lor b1) in 
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   `Ok (s0, s1)
-    
+
+let d_f2dot14 d = match d_int16 d with
+| `Error _ as e -> e 
+| `Ok v -> `Ok ((float v) /. 16384.0)
+
 let d_utf_16be len (* in bytes *) d =            (* returns an UTF-8 string. *) 
   match d_bytes len d with
   | `Error _ as e ->  e
@@ -316,7 +339,7 @@ let d_version d =
   | t when (t = Tag.v_true || t = 0x00010000l) -> d.flavour <- `TTF; `Ok ()
   | t when t = Tag.v_ttcf -> `Error `Unsupported_TTC
   | t -> `Error (`Unknown_flavour t)
-           
+
 let d_structure d =                   (* offset table and table directory. *)
   d_version      d >>= fun () ->                          (* offset table. *)
   d_uint16       d >>= fun count ->                          (* numTables. *)
@@ -510,7 +533,142 @@ let cmap d f acc =
       | 4 -> d_cmap_4 | 12 -> d_cmap_12 | 13 -> d_cmap_13 | _ -> assert false
       in
       seek_table_pos pos d >>= cmap (pid, eid, fmt) d f acc
-        
+
+(* glyf table *) 
+
+type glyf_loc = int
+
+type glyph_simple_descr = (bool * int * int) list list 
+
+type glyph_composite_descr =
+  (glyph_id * (int * int) * (float * float * float * float) option) list
+
+type glyph_descr = 
+  [ `Simple of glyph_simple_descr 
+  | `Composite of glyph_composite_descr ] * (int * int * int * int)
+
+let init_glyf d () = 
+  if d.glyf_pos <> -1 then `Ok () else
+  seek_required_table Tag.glyf d () >>= fun () -> d.glyf_pos <- d.i_pos; `Ok ()
+
+let d_rev_end_points d ccount = 
+  let rec loop i acc = 
+    if i <= 0 then `Ok acc else 
+    d_uint16 d >>= fun e -> loop (i - 1) (e :: acc)  
+  in
+  loop ccount []
+    
+let d_rev_flags d pt_count = 
+  let rec loop i acc = 
+    if i <= 0 then `Ok acc else 
+    d_uint8 d >>= fun f -> 
+    if f land 8 = 0 then loop (i - 1) (f :: acc) else 
+    d_uint8 d >>= fun n -> 
+    let rec push n acc = if n = 0 then acc else push (n - 1) (f :: acc) in
+    loop (i - 1 - n) (push (n + 1) acc)
+  in
+  loop pt_count []
+
+let d_rev_coord short_mask same_mask d flags = 
+  let rec loop x acc = function 
+  | f :: fs -> 
+      if f land short_mask > 0 then begin 
+        d_uint8 d >>= fun dx ->
+        let x = x + (if f land same_mask > 0 then dx else -dx) in 
+        loop x (x :: acc) fs
+      end else begin 
+        if f land same_mask > 0 then loop x (x :: acc) fs else 
+        d_int16 d >>= fun dx -> 
+        let x = x + dx in 
+        loop x (x :: acc) fs
+      end      
+  | [] -> `Ok acc 
+  in
+  loop 0 [] flags
+
+let d_rev_xs d flags = d_rev_coord 2 16 d flags
+let d_rev_ys d flags = d_rev_coord 4 32 d flags 
+
+let d_simple_glyph d ccount = 
+  if ccount = 0 then `Ok [] else
+  d_rev_end_points d ccount 
+  >>= fun rev_epts -> 
+  let pt_count = match rev_epts with [] -> 0 | e :: _ -> e + 1 in
+  d_uint16 d
+  >>= fun ins_len -> d_skip ins_len d 
+  >>= fun () -> d_rev_flags d pt_count 
+  >>= fun rev_flags -> 
+  let flags = List.rev rev_flags in 
+  d_rev_xs d flags 
+  >>= fun rxs -> d_rev_ys d flags 
+  >>= fun rys ->
+  let rec combine repts flags rxs rys i acc = match flags with
+  | [] -> acc
+  | f :: fs -> 
+      let new_contour, repts = match repts with 
+      | [] -> false, []  
+      | e :: es when e = i -> true, es 
+      | es -> false, es 
+      in
+      match acc with 
+      | c :: cs -> 
+          let new_pt = f land 1 > 0,  List.hd rxs, List.hd rys in 
+          let acc' = 
+            if new_contour then [new_pt] :: c :: cs else
+            (new_pt :: c) :: cs
+          in
+          combine repts fs (List.tl rxs) (List.tl rys) (i - 1) acc' 
+      | _ -> assert false 
+  in
+  `Ok (combine (List.tl rev_epts) rev_flags rxs rys (pt_count - 1) ([] :: []))
+
+let d_composite_glyph d = 
+  let rec loop acc = 
+    d_uint16 d 
+    >>= fun flags -> d_uint16 d 
+    >>= fun gid -> 
+    if flags land 2 = 0 then err `Unsupported_glyf_matching_points else 
+    let dec = if flags land 1 > 0 then d_int16 else d_uint8 in 
+    dec d 
+    >>= fun dx -> dec d 
+    >>= fun dy -> 
+    begin 
+      if flags land 8 > 0 (* scale *) then 
+        d_f2dot14 d >>= fun s -> `Ok (Some (s, 0., 0., s))
+      else if flags land 64 > 0 then (* xy scale *) 
+        d_f2dot14 d >>= fun sx -> 
+        d_f2dot14 d >>= fun sy -> `Ok (Some (sx, 0., 0., sy))
+      else if flags land 128 > 0 then (* m2 *) 
+        d_f2dot14 d >>= fun a -> d_f2dot14 d >>= fun b -> 
+        d_f2dot14 d >>= fun c -> d_f2dot14 d >>= fun d -> `Ok (Some (a,b,c,d))
+      else
+      `Ok None
+    end 
+    >>= fun m ->
+    let acc' = (gid, (dx, dy), m) :: acc in
+    if flags land 32 > 0 then loop acc' else `Ok (List.rev acc') 
+  in
+  loop [] 
+  
+let glyf d loc =
+  init_decoder d 
+  >>= init_glyf d 
+  >>= fun () -> seek_pos (d.glyf_pos + loc) d
+  >>= fun () -> d_int16 d 
+  >>= fun ccount -> d_int16 d 
+  >>= fun xmin -> d_int16 d 
+  >>= fun ymin -> d_int16 d
+  >>= fun xmax -> d_int16 d
+  >>= fun ymax -> 
+  if ccount < -1 then err_composite_format d ccount else 
+  if ccount = -1 
+  then 
+    d_composite_glyph d >>= fun components -> 
+    `Ok (`Composite components, (xmin, ymin, xmax, ymax)) 
+  else
+    d_simple_glyph d ccount >>= fun contours ->
+    `Ok (`Simple contours, (xmin, ymin, xmax, ymax))
+  
 (* head table *) 
         
 type head = 
@@ -878,7 +1036,43 @@ let kern d t p acc =
       if version > 0 then err_version d (Int32.of_int version) else
       d_uint16 d >>= fun ntables ->
       kern_tables ntables t p acc d
-        
+       
+(* loca table *) 
+
+let d_loca_format d () = 
+  d_uint16 d >>= fun f -> if f > 1 then err_loca_format d f else `Ok f
+
+let init_loca d () = 
+  if d.loca_pos <> -1 then `Ok () else
+  seek_required_table Tag.head d () 
+  >>= fun () -> d_skip 50 d
+  >>= d_loca_format d
+  >>= fun loca_format -> 
+  d.loca_format <- loca_format;
+  seek_required_table Tag.loca d ()
+  >>= fun () -> d.loca_pos <- d.i_pos; 
+  `Ok ()
+                    
+let loca_short d gid = 
+  seek_pos (d.loca_pos + gid * 2) d
+  >>= fun () -> d_uint16 d 
+  >>= fun o1 -> d_uint16 d 
+  >>= fun o2 -> 
+  let o1 = o1 * 2 in 
+  let o2 = o2 * 2 in 
+  if o1 = o2 then `Ok None else `Ok (Some o1)
+
+let loca_long d gid = 
+  seek_pos (d.loca_pos + gid * 4) d
+  >>= fun () -> d_uint32_int d
+  >>= fun o1 -> d_uint32_int d 
+  >>= fun o2 -> if o1 = o2 then `Ok None else `Ok (Some o1)
+      
+let loca d gid = 
+  init_decoder d 
+  >>= init_loca d 
+  >>= fun () -> if d.loca_format = 0 then loca_short d gid else loca_long d gid
+ 
 (*---------------------------------------------------------------------------
    Copyright 2013 Daniel C. Bünzli.
    All rights reserved.
