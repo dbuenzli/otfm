@@ -628,7 +628,7 @@ let d_composite_glyph d =
     >>= fun flags -> d_uint16 d 
     >>= fun gid -> 
     if flags land 2 = 0 then err `Unsupported_glyf_matching_points else 
-    let dec = if flags land 1 > 0 then d_int16 else d_uint8 in 
+    let dec = if flags land 1 > 0 then d_int16 else d_int8 in 
     dec d 
     >>= fun dx -> dec d 
     >>= fun dy -> 
