@@ -3,13 +3,15 @@ maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
 homepage: "http://erratique.ch/software/otfm"
 authors: ["Daniel Bünzli <daniel.buenzli i@erratique.ch>"]
 doc: "http://erratique.ch/software/otfm/doc/Otfm"
-tags: [ "OpenType" "font" "decoder" "graphics" ]
+dev-repo: "http://erratique.ch/repos/otfm.git"
+bug-reports: "https://github.com/dbuenzli/otfm/issues"
+tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]
 license: "BSD3"
 depends: [ "ocamlfind" "uutf" ]
-ocaml-version: [>= "4.00.0"]
+ocaml-version: [>= "4.01.0"]
 build: 
 [
   [ "ocaml" "pkg/git.ml" ]
   [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
-                           "native-dynlink=%{ocaml-native}%" ] # TODO FIXME
+                           "native-dynlink=%{ocaml-native-dynlink}%" ]
 ]
