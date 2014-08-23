@@ -5,15 +5,15 @@
   ---------------------------------------------------------------------------*)
 
 let str = Format.sprintf
-let log f = Format.printf (f ^^ "@?") 
-let fail fmt = 
+let log f = Format.printf (f ^^ "@?")
+let fail fmt =
   let fail _ = failwith (Format.flush_str_formatter ()) in
   Format.kfprintf fail Format.str_formatter fmt
-  
-let test_tag_constants () = 
+
+let test_tag_constants () =
   log "Testing tag constants.\n";
-  let test t str = 
-    if Otfm.Tag.compare t (Otfm.Tag.of_bytes str) <> 0 
+  let test t str =
+    if Otfm.Tag.compare t (Otfm.Tag.of_bytes str) <> 0
     then fail "Wrong constant for '%s' tag" str
   in
   test Otfm.Tag.cmap "cmap";
@@ -50,11 +50,11 @@ let test_tag_constants () =
   test Otfm.Tag.jstf "JSTF"
 
 let test () =
-  Printexc.record_backtrace true; 
+  Printexc.record_backtrace true;
   test_tag_constants ()
 
-let () = if not (!Sys.interactive) then test () 
- 
+let () = if not (!Sys.interactive) then test ()
+
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2013 Daniel C. Bünzli
@@ -63,7 +63,7 @@ let () = if not (!Sys.interactive) then test ()
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
    are met:
-     
+
    1. Redistributions of source code must retain the above copyright
       notice, this list of conditions and the following disclaimer.
 
@@ -99,7 +99,7 @@ let () = ()
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
    are met:
-     
+
    1. Redistributions of source code must retain the above copyright
       notice, this list of conditions and the following disclaimer.
 
