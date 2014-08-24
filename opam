@@ -1,7 +1,7 @@
 opam-version: "1"
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
 homepage: "http://erratique.ch/software/otfm"
-authors: ["Daniel Bünzli <daniel.buenzli i@erratique.ch>"]
+authors: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
 doc: "http://erratique.ch/software/otfm/doc/Otfm"
 dev-repo: "http://erratique.ch/repos/otfm.git"
 bug-reports: "https://github.com/dbuenzli/otfm/issues"
