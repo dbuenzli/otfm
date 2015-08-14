@@ -752,10 +752,14 @@ let d_hm_count d =
 
 let rec d_hmetric goffset i f acc last_adv d =
   if i = 0 then `Ok (acc, last_adv) else
-  d_uint16 d >>= fun adv ->
-  d_int16  d >>= fun lsb ->
-  let acc' = f acc (goffset - i) adv lsb in
-  d_hmetric goffset (i - 1) f acc' adv d
+  match d_uint16 d with
+  | `Error _ as e -> e
+  | `Ok adv ->
+      match d_int16 d with
+      | `Error _ as e -> e
+      | `Ok lsb ->
+          let acc' = f acc (goffset - i) adv lsb in
+          d_hmetric goffset (i - 1) f acc' adv d
 
 let rec d_hlsb goffset i f acc adv d =
   if i = 0 then `Ok acc else
