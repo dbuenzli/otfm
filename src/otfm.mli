@@ -130,7 +130,7 @@ module Tag : sig
 
   val of_bytes : string -> tag
   (** [of_bytes s] is a tag corresponding to [s].
-      @Raise Invalid_argument if [s] is not four byte long. *)
+      @raise Invalid_argument if [s] is not four byte long. *)
 
   val to_bytes : tag -> string
   (** [to_string t] is the tag as a four byte long string. *)
