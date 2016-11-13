@@ -36,7 +36,7 @@ let string_of_file inf =
 (* Table pretty printers *)
 
 let pp_cmap ppf d =
-  let pp_map ppf u gid = pp ppf "@,(%a %d)" Uutf.pp_cp u gid in
+  let pp_map ppf u gid = pp ppf "@,(%a %d)" Otfm.pp_cp u gid in
   let pp_binding ppf () k (u0, u1) gid = match k with
   | `Glyph -> for u = u0 to u1 do pp_map ppf u gid done
   | `Glyph_range -> for i = 0 to (u1 - u0) do pp_map ppf (u0 + i) (gid + i)done

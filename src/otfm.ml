@@ -117,6 +117,7 @@ end
 type cp = int
 type cp_range = cp * cp
 let is_cp i = 0x0000 <= i && i <= 0x10FFFF
+let pp_cp ppf cp = Format.fprintf ppf "U+%04X" cp
 
 (* Decode *)
 
@@ -163,10 +164,9 @@ let pp_error ppf = function
 | `Invalid_offset (ctx, o) ->
     pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
 | `Invalid_cp u ->
-    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" Uutf.pp_cp u
+    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
 | `Invalid_cp_range (u0, u1) ->
-    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]"
-      Uutf.pp_cp u0 Uutf.pp_cp u1
+    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
 | `Invalid_postscript_name n ->
     pp ppf "@[Invalid@ PostScript@ name (%S)@]" n
 | `Unexpected_eoi ctx ->

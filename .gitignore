@@ -1,7 +1,7 @@
 _build
 tmp
-dist
-_obuild
 \.\#*
 \#*#
-CLOCK.org
+*.native
+*.byte
+*.install

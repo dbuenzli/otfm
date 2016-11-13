@@ -1,5 +1,6 @@
 
-
+- Support latest uutf.
+- Build depend on topkg.
 - Relicense from BSD3 to ISC.
 
 v0.2.0 2014-08-23 Cambridge (UK)

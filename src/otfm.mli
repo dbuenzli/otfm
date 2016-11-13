@@ -171,6 +171,9 @@ val is_cp : int -> bool
 (** [is_cp i] is [true] if [i] is an
     Unicode {{:http://unicode.org/glossary/#code_point}code point}. *)
 
+val pp_cp : Format.formatter -> cp -> unit
+(** [pp_cp ppf cp] prints an unspecified representation of [cp] on [ppf]. *)
+
 (** {1 Decode} *)
 
 type error_ctx =
