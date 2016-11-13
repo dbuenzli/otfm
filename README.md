@@ -7,7 +7,7 @@ provides low-level access to font tables and functions to decode some
 of them.
 
 Otfm is made of a single module and depends on [Uutf][1]. It is distributed 
-under the BSD3 license.
+under the ISC license.
 
 [1]: http://erratique.ch/software/uutf
      

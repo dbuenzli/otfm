@@ -6,10 +6,10 @@ doc: "http://erratique.ch/software/otfm/doc/Otfm"
 dev-repo: "http://erratique.ch/repos/otfm.git"
 bug-reports: "https://github.com/dbuenzli/otfm/issues"
 tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]
-license: "BSD3"
+license: "ISC"
 depends: [ "ocamlfind" "uutf" ]
 ocaml-version: [>= "4.01.0"]
-build: 
+build:
 [
   [ "ocaml" "pkg/git.ml" ]
   [ "ocaml" "pkg/build.ml" "native=%{ocaml-native}%"
