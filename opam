@@ -12,6 +12,7 @@ depends: [
  "ocamlfind" {build}
  "ocamlbuild" {build}
  "topkg" {build}
+ "result"
  "uchar"
  "uutf" ]
 build: [[

@@ -4,6 +4,8 @@
    %%NAME%% %%VERSION%%
   ---------------------------------------------------------------------------*)
 
+open Result
+
 let pp = Format.fprintf
 let str = Format.sprintf
 
@@ -27,11 +29,11 @@ let string_of_file inf =
       done;
       assert false
     with
-    | Exit -> close ic; `Ok (Buffer.contents b)
-    | Failure _ -> close ic; `Error (`Msg (str "%s: input file too large" inf))
-    | Sys_error e -> close ic; (`Error (`Msg e));
+    | Exit -> close ic; Ok (Buffer.contents b)
+    | Failure _ -> close ic; Error (`Msg (str "%s: input file too large" inf))
+    | Sys_error e -> close ic; (Error (`Msg e));
   with
-  | Sys_error e -> (`Error (`Msg e))
+  | Sys_error e -> (Error (`Msg e))
 
 (* Table pretty printers *)
 
@@ -43,14 +45,14 @@ let pp_cmap ppf d =
   in
   pp ppf "@,@[<v1>(cmap";
   match Otfm.cmap d (pp_binding ppf) () with
-  | `Error _ as e -> e
-  | `Ok ((pid, eid, fmt), _) ->
+  | Error _ as e -> e
+  | Ok ((pid, eid, fmt), _) ->
       pp ppf "@,@[<1>(source@ (platform-id %d)@ (encoding-id %d)\
               @ (format %d))@])@]" pid eid fmt;
-      `Ok ()
+      Ok ()
 
 let pp_glyf ppf has_glyf d =
-  if not has_glyf then `Ok () else
+  if not has_glyf then Ok () else
   let pp_bbox ppf (minx, miny, maxx, maxy) =
     pp ppf "@[(bbox@ %d@ %d@ %d@ %d)@]" minx miny maxx maxy
   in
@@ -79,19 +81,19 @@ let pp_glyf ppf has_glyf d =
     pp ppf ")@]"
   in
   match Otfm.glyph_count d with
-  | `Error _ as e -> e
-  | `Ok gc ->
+  | Error _ as e -> e
+  | Ok gc ->
       pp ppf "@,@[<v1>(glyf";
       let rec loop gid =
-        if gid >= gc then (pp ppf "@]"; `Ok ()) else
+        if gid >= gc then (pp ppf "@]"; Ok ()) else
         match Otfm.loca d gid with
-        | `Error _ as e -> e
-        | `Ok None -> pp ppf "@,@[(glyph-no-outline %d)@]" gid; loop (gid + 1)
-        | `Ok (Some gloc) ->
+        | Error _ as e -> e
+        | Ok None -> pp ppf "@,@[(glyph-no-outline %d)@]" gid; loop (gid + 1)
+        | Ok (Some gloc) ->
             match Otfm.glyf d gloc with
-            | `Error _ as e -> e
-            | `Ok (`Simple cs, bb) -> pp_simple ppf gid cs bb; loop (gid + 1)
-            | `Ok (`Composite cs, bb) ->
+            | Error _ as e -> e
+            | Ok (`Simple cs, bb) -> pp_simple ppf gid cs bb; loop (gid + 1)
+            | Ok (`Composite cs, bb) ->
                 pp_composite ppf gid cs bb; loop (gid + 1)
       in
       loop 0
@@ -99,8 +101,8 @@ let pp_glyf ppf has_glyf d =
 let pp_head ppf d =
   pp ppf "@,@[<v1>(head";
   match Otfm.head d with
-  | `Error _ as e -> e
-  | `Ok h ->
+  | Error _ as e -> e
+  | Ok h ->
       pp ppf "@,(font-revision 0x%08lX)" h.Otfm.head_font_revision;
       pp ppf "@,(flags 0x%04X)" h.Otfm.head_flags;
       pp ppf "@,(units-per-em %d)" h.Otfm.head_units_per_em;
@@ -114,11 +116,11 @@ let pp_head ppf d =
       pp ppf "@,(lowest_rec_ppem %d)" h.Otfm.head_lowest_rec_ppem;
       pp ppf "@,(index_to_loc_format %d)" h.Otfm.head_index_to_loc_format;
       pp ppf ")@]";
-      `Ok ()
+      Ok ()
 
 let pp_hhea ppf d = match Otfm.hhea d with
-| `Error _ as e -> e
-| `Ok h ->
+| Error _ as e -> e
+| Ok h ->
     pp ppf "@,@[<v1>(hhea";
     pp ppf "@,(ascender %d)" h.Otfm.hhea_ascender;
     pp ppf "@,(descender %d)" h.Otfm.hhea_descender;
@@ -131,29 +133,29 @@ let pp_hhea ppf d = match Otfm.hhea d with
     pp ppf "@,(caret-slope-run %d)" h.Otfm.hhea_caret_slope_run;
     pp ppf "@,(caret-offset %d)" h.Otfm.hhea_caret_offset;
     pp ppf ")@]";
-    `Ok ()
+    Ok ()
 
 let pp_hmtx ppf d =
   let pp_hm ppf () id adv lsb = pp ppf "@,(%d (adv %d) (lsb %d))" id adv lsb in
   pp ppf "@,@[<v1>(hmtx";
   match Otfm.hmtx d (pp_hm ppf) () with
-  | `Error _ as e -> e
-  | `Ok () -> pp ppf ")@]"; `Ok ()
+  | Error _ as e -> e
+  | Ok () -> pp ppf ")@]"; Ok ()
 
 let pp_name ppf d =
   let pp_n ppf () id lang string = pp ppf "@,(%d %s \"%s\")" id lang string in
   pp ppf "@,@[<v1>(name";
   match Otfm.name d (pp_n ppf) () with
-  | `Error _ as e -> e
-  | `Ok () -> pp ppf ")@]"; `Ok ()
+  | Error _ as e -> e
+  | Ok () -> pp ppf ")@]"; Ok ()
 
 let pp_os2 ppf d =
   let pp_opt pp_v ppf = function None -> pp ppf "None" | Some v -> pp_v ppf v in
   let pp_ouint32 ppf v = pp_opt (fun ppf v -> pp ppf "%lX" v) ppf v in
   let pp_oint = pp_opt Format.pp_print_int in
   match Otfm.os2 d with
-  | `Error _ as e -> e
-  | `Ok o ->
+  | Error _ as e -> e
+  | Ok o ->
       pp ppf "@,@[<v1>(os2";
       pp ppf "@,(x-avg-char-width %d)" o.Otfm.os2_x_avg_char_width;
       pp ppf "@,(us-weight-class %d)" o.Otfm.os2_us_weight_class;
@@ -195,10 +197,10 @@ let pp_os2 ppf d =
       pp ppf "@,(us-break-char %a)" pp_oint o.Otfm.os2_us_break_char;
       pp ppf "@,(us-max-context %a)" pp_oint o.Otfm.os2_us_max_context;
       pp ppf ")@]";
-      `Ok ()
+      Ok ()
 
 let pp_kern ppf has_kern d =
-  if not has_kern then `Ok () else
+  if not has_kern then Ok () else
   let dir = function `H -> "H" | `V -> "V" in
   let kind = function `Kern -> "kerning" | `Min -> "minimal" in
   let pp_kinfo ppf first i =
@@ -211,14 +213,14 @@ let pp_kern ppf has_kern d =
   let pp_pair ppf first l r v = pp ppf "@,(%d %d %d)" l r v; first in
   pp ppf "@,@[<v1>(kern";
   match Otfm.kern d (pp_kinfo ppf) (pp_pair ppf) true with
-  | `Error _ as e -> e
-  | `Ok _ -> pp ppf ")@])@]"; `Ok ()
+  | Error _ as e -> e
+  | Ok _ -> pp ppf ")@])@]"; Ok ()
 
 let pp_tables ppf inf ts d =
   let err = ref false in
   let ( >>= ) x f = match x with
-  | `Ok () -> f ()
-  | `Error e -> log_err inf e; err := true; f ()
+  | Ok () -> f ()
+  | Error e -> log_err inf e; err := true; f ()
   in
   pp_name ppf d >>= fun () ->
   pp_head ppf d >>= fun () ->
@@ -228,16 +230,16 @@ let pp_tables ppf inf ts d =
   pp_hmtx ppf d >>= fun () ->
   pp_glyf ppf (List.mem Otfm.Tag.glyf ts) d >>= fun () ->
   pp_kern ppf (List.mem Otfm.Tag.kern ts) d >>= fun () ->
-  if !err then (`Error `Reported) else `Ok ()
+  if !err then (Error `Reported) else Ok ()
 
 (* Commands *)
 
 let pp_file ppf inf = match string_of_file inf with
-| `Error _ as e -> e
-| `Ok s ->
+| Error _ as e -> e
+| Ok s ->
     let ( >>= ) x f = match x with
-    | `Ok v -> f v
-    | `Error e -> `Error (e :> [ Otfm.error | `Reported | `Msg of string])
+    | Ok v -> f v
+    | Error e -> Error (e :> [ Otfm.error | `Reported | `Msg of string])
     in
     let d = Otfm.decoder (`String s) in
     Otfm.flavour d >>= fun f ->
@@ -255,15 +257,15 @@ let pp_file ppf inf = match string_of_file inf with
     pp ppf ")@]";
     pp_tables ppf inf ts d >>= fun () ->
     pp ppf ")@]@.";
-    `Ok ()
+    Ok ()
 
 let dec_file inf = match string_of_file inf with
-| `Error _ as e -> e
-| `Ok s ->
+| Error _ as e -> e
+| Ok s ->
     let err = ref false in
     let ( >>= ) x f = match x with
-    | `Ok _ -> f ()
-    | `Error e -> log_err inf e; err := true; f ()
+    | Ok _ -> f ()
+    | Error e -> log_err inf e; err := true; f ()
     in
     let kern_nop () _ = `Fold, () in
     let nop4 _ _ _ _ = () in
@@ -277,16 +279,16 @@ let dec_file inf = match string_of_file inf with
     Otfm.name d nop4 () >>= fun () ->
     Otfm.os2  d         >>= fun () ->
     Otfm.kern d kern_nop nop4 () >>= fun () ->
-    if !err then (`Error `Reported) else `Ok ()
+    if !err then (Error `Reported) else Ok ()
 
 let ps_file inf = match string_of_file inf with
-| `Error _ as e -> e
-| `Ok s ->
+| Error _ as e -> e
+| Ok s ->
     let d = Otfm.decoder (`String s) in
     match Otfm.postscript_name d with
-    | `Error e -> `Error (e :> [ Otfm.error | `Reported | `Msg of string])
-    | `Ok None -> Printf.printf "%s: <none>\n" inf; `Ok ()
-    | `Ok (Some n) -> Printf.printf "%s: %s\n" inf n; `Ok ()
+    | Error e -> Error (e :> [ Otfm.error | `Reported | `Msg of string])
+    | Ok None -> Printf.printf "%s: <none>\n" inf; Ok ()
+    | Ok (Some n) -> Printf.printf "%s: %s\n" inf n; Ok ()
 
 (* otftrip *)
 
@@ -313,10 +315,10 @@ let main () =
   | `Ps -> ps_file
   in
   let fold_cmd cmd err fn = match cmd fn with
-  | `Error `Reported -> true
-  | `Error (`Msg e) -> log "%s" e; true
-  | `Error (#Otfm.error as e) -> log_err fn e; true
-  | `Ok () -> err
+  | Error `Reported -> true
+  | Error (`Msg e) -> log "%s" e; true
+  | Error (#Otfm.error as e) -> log_err fn e; true
+  | Ok () -> err
   in
   let err = List.fold_left (fold_cmd cmd) false files in
   if err then exit 1 else exit 0

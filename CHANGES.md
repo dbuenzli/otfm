@@ -1,4 +1,5 @@
 
+- Use standard library result type.
 - Support latest uutf.
 - Build depend on topkg.
 - Relicense from BSD3 to ISC.
