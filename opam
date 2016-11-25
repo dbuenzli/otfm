@@ -14,7 +14,8 @@ depends: [
  "topkg" {build}
  "result"
  "uchar"
- "uutf" ]
+ "uutf" {>= "1.0.0"}
+]
 build: [[
   "ocaml" "pkg/pkg.ml" "build"
           "--pinned" "%{pinned}%" ]]
