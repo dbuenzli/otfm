@@ -1,8 +1,12 @@
+v0.3.0 2016-11-25 Zagreb
+------------------------
 
-- Use standard library result type.
-- Support latest uutf.
+- Use standard library `result` type.
+- Support uutf 1.0.0.
+- Safe string support.
 - Build depend on topkg.
 - Relicense from BSD3 to ISC.
+
 
 v0.2.0 2014-08-23 Cambridge (UK)
 --------------------------------
