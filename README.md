@@ -1,18 +1,19 @@
 Otfm — OpenType font decoder for OCaml
 -------------------------------------------------------------------------------
-Release %%VERSION%%
+%%VERSION%%
 
 Otfm is an in-memory decoder for the OpenType font data format. It
 provides low-level access to font tables and functions to decode some
 of them.
 
-Otfm is made of a single module and depends on [Uutf][1]. It is distributed 
+Otfm is made of a single module and depends on [Uutf][uutf]. It is distributed 
 under the ISC license.
 
-[1]: http://erratique.ch/software/uutf
+[uutf]: http://erratique.ch/software/uutf
      
 Home page: http://erratique.ch/software/otfm  
 Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>
+
 
 ## Installation
 
@@ -23,23 +24,22 @@ Otfm can be installed with `opam`:
 If you don't use `opam` consult the [`opam`](opam) file for build
 instructions and a complete specification of the dependencies. 
 
+
 ## Documentation 
 
 The documentation and API reference is automatically generated 
-by `ocamldoc` from `otfm.mli`. It can be consulted [online][1] and
-there is a generated version in the `doc` directory of the
-distribution. 
+from the interfaces. It can be consulted [online][doc] or via
+`odig doc otfm`.
 
-[1]: http://erratique.ch/software/otfm/doc/Otfm
+[doc]: http://erratique.ch/software/otfm/doc/Otfm
+
 
 ## Sample programs 
 
 Sample programs are located in the `test` directory of the
 distribution. They can be built with:
 
-    ocamlbuild tests.otarget 
-    
-The resulting binaries are in `_build/test`:
+    topkg build --tests true 
 
 - `test.byte` tests the library, nothing should fail.
 - `otftrip.native`, among other things, reads an OpenType file and
