@@ -1016,14 +1016,14 @@ let rec kern_tables ntables t p acc d =
   | `Skip, acc -> skip acc
   | `Fold, acc ->
       let rec d_pairs len acc d =
-        if len < 3 * 2 then d_skip len d >>= fun () -> Ok acc else
+        if len <= 0 then d_skip len d >>= fun () -> Ok acc else
         d_uint16 d >>= fun left ->
         d_uint16 d >>= fun right ->
         d_int16 d >>= fun values ->
         d_pairs (len - 3 * 2) (p acc left right values) d
       in
       d_skip (4 * 2)  d >>= fun () ->
-      d_pairs len acc d >>= fun acc ->
+      d_pairs (len - 4 * 2 - 3 * 2) acc d >>= fun acc ->
       kern_tables (ntables - 1) t p acc d
 
 let kern d t p acc =
