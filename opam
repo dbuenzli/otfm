@@ -1,8 +1,8 @@
 opam-version: "2.0"
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
 homepage: "https://erratique.ch/software/otfm"
-authors: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-doc: "https://erratique.ch/software/otfm/doc/Otfm"
+authors: ["The otfm programmers"]
+doc: "https://erratique.ch/software/otfm/doc"
 dev-repo: "git+https://erratique.ch/repos/otfm.git"
 bug-reports: "https://github.com/dbuenzli/otfm/issues"
 tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]

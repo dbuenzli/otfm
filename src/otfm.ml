@@ -1,5 +1,5 @@
 (*---------------------------------------------------------------------------
-   Copyright (c) 2013 Daniel C. Bünzli. All rights reserved.
+   Copyright (c) 2013 The otfm programmers. All rights reserved.
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
@@ -1073,7 +1073,7 @@ let loca d gid =
   >>= fun () -> if d.loca_format = 0 then loca_short d gid else loca_long d gid
 
 (*---------------------------------------------------------------------------
-   Copyright (c) 2013 Daniel C. Bünzli
+   Copyright (c) 2013 The otfm programmers
 
    Permission to use, copy, modify, and/or distribute this software for any
    purpose with or without fee is hereby granted, provided that the above

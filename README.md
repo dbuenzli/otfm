@@ -11,9 +11,7 @@ under the ISC license.
 
 [uutf]: http://erratique.ch/software/uutf
      
-Home page: http://erratique.ch/software/otfm  
-Contact: Daniel Bünzli `<daniel.buenzl i@erratique.ch>
-
+Homepage: http://erratique.ch/software/otfm  
 
 ## Installation
 
@@ -31,7 +29,7 @@ The documentation and API reference is automatically generated
 from the interfaces. It can be consulted [online][doc] or via
 `odig doc otfm`.
 
-[doc]: http://erratique.ch/software/otfm/doc/Otfm
+[doc]: http://erratique.ch/software/otfm/doc/
 
 
 ## Sample programs 
