@@ -107,7 +107,7 @@ module Tag = struct
 
   let to_int32 x = x
   let of_int32 x = x
-  let compare : int32 -> int32 -> int = Pervasives.compare
+  let compare : int32 -> int32 -> int = compare
   let pp ppf t = pp ppf "'%s'" (to_bytes t)
 end
 
