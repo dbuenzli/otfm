@@ -1,19 +1,17 @@
-opam-version: "1.2"
+opam-version: "2.0"
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
-homepage: "http://erratique.ch/software/otfm"
+homepage: "https://erratique.ch/software/otfm"
 authors: ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-doc: "http://erratique.ch/software/otfm/doc/Otfm"
-dev-repo: "http://erratique.ch/repos/otfm.git"
+doc: "https://erratique.ch/software/otfm/doc/Otfm"
+dev-repo: "git+https://erratique.ch/repos/otfm.git"
 bug-reports: "https://github.com/dbuenzli/otfm/issues"
 tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]
 license: "ISC"
-available: [ ocaml-version >= "4.01.0" ]
 depends: [
+ "ocaml-version" {>= "4.05.0"}
  "ocamlfind" {build}
  "ocamlbuild" {build}
  "topkg" {build}
- "result"
- "uchar"
  "uutf" {>= "1.0.0"}
 ]
 build: [[

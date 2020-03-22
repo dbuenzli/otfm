@@ -26,8 +26,6 @@
     {e {{:http://www.microsoft.com/typography/otspec/default.htm}
         The OpenType Specification}}, 2009.}} *)
 
-open Result
-
 (** {1 Tags} *)
 
 type tag

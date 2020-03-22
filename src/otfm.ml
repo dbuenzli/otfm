@@ -4,8 +4,6 @@
    %%NAME%% %%VERSION%%
   ---------------------------------------------------------------------------*)
 
-open Result
-
 (* Error strings *)
 
 let err_invalid_tag s = Printf.sprintf "invalid OpenType tag (%S)" s

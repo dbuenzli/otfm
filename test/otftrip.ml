@@ -4,8 +4,6 @@
    %%NAME%% %%VERSION%%
   ---------------------------------------------------------------------------*)
 
-open Result
-
 let pp = Format.fprintf
 let str = Format.sprintf
 
