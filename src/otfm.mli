@@ -215,7 +215,7 @@ val decoder_src : decoder -> src
 (** {1 Table decoding}
 
     These functions can be used in any order and are robust: when they
-    return an error the decoder is back to a consistant state and can
+    return an error the decoder is back to a consistent state and can
     be used further. However if {!flavour} or {!table_list} returns an
     error you can safely assume that all other functions will. The
     fields are in general not documented please refer to the OpenType
