@@ -8,7 +8,7 @@ bug-reports: "https://github.com/dbuenzli/otfm/issues"
 tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]
 license: "ISC"
 depends: [
- "ocaml-version" {>= "4.05.0"}
+ "ocaml" {>= "4.05.0"}
  "ocamlfind" {build}
  "ocamlbuild" {build}
  "topkg" {build}
