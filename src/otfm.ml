@@ -1016,7 +1016,7 @@ let rec kern_tables ntables t p acc d =
   | `Skip, acc -> skip acc
   | `Fold, acc ->
       let rec d_pairs len acc d =
-        if len <= 0 then d_skip len d >>= fun () -> Ok acc else
+        if len <= 0 then Ok acc else
         d_uint16 d >>= fun left ->
         d_uint16 d >>= fun right ->
         d_int16 d >>= fun values ->
