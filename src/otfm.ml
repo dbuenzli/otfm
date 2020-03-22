@@ -836,20 +836,20 @@ let lcid_to_bcp47 = [
 
 type lang = string
 
-let rec d_name_langs soff ncount d =
+let d_name_langs soff ncount d =
   d_skip (ncount * 6 * 2) d >>= fun () ->
   d_uint16                d >>= fun lcount ->
   let rec loop i acc =
-    if ncount = 0 then Ok acc else
+    if i = 0 then Ok acc else
     d_uint16 d >>= fun len ->
     d_uint16 d >>= fun off ->
     let cpos = cur_pos d in
     seek_table_pos (soff + off) d >>= fun () ->
     d_utf_16be len d >>= fun lang ->
     seek_pos cpos d >>= fun () ->
-    loop (i - 1) ((0x8000 + (ncount - i), lang) :: acc)
+    loop (i - 1) ((0x8000 + (lcount - i), lang) :: acc)
   in
-  loop ncount []
+  loop lcount []
 
 let rec d_name_records soff ncount f acc langs seen d =
   if ncount = 0 then Ok acc else

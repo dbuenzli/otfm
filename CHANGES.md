@@ -1,5 +1,6 @@
 
-
+- Fix decoding of language tag records in `name` tables with
+  format 1. Thanks to Philippe Veber for the report. (#3).
 - Require OCaml >= 4.05.0
 
 v0.3.0 2016-11-25 Zagreb
