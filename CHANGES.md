@@ -1,4 +1,7 @@
+v0.4.0 2020-03-23 Concise
+-------------------------
 
+- Fix decoding of `kern` table. Thanks to Philippe Veber for the patch (#4).
 - Fix decoding of language tag records in `name` tables with
   format 1. Thanks to Philippe Veber for the report. (#3).
 - Require OCaml >= 4.05.0
