@@ -125,7 +125,9 @@ type platform_id = int
 
 (* Decode *)
 
-type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
+type error_ctx =
+  [ `Table of tag | `Ttc_header | `Offset_table | `Table_directory ]
+
 type error =
 [ `Invalid_cp of int
 | `Invalid_cp_range of int * int
@@ -145,6 +147,7 @@ let pp_ctx ppf = function
 | `Table tag -> pp ppf "table %a" Tag.pp tag
 | `Offset_table -> pp ppf "offset table"
 | `Table_directory -> pp ppf "table directory"
+| `Ttc_header -> pp ppf "TTC header"
 
 let pp_error ppf = function
 | `Unknown_flavour tag ->
@@ -187,25 +190,26 @@ type src = [ `String of string ]
    but rather pass them as arguments to decoding functions. *)
 
 type decoder =
-  { mutable i : string;                                       (* input data. *)
-    mutable i_pos : int;                          (* input current position. *)
-    mutable i_max : int;                          (* input maximal position. *)
-    mutable t_pos : int;                  (* current decoded table position. *)
+  { mutable in_collection : bool; (* [true] if in collection. *)
+    mutable i : string; (* input data. *)
+    mutable i_pos : int; (* input current position. *)
+    mutable i_max : int; (* input maximal position. *)
+    mutable t_pos : int; (* current decoded table position. *)
     mutable state : [ `Fatal of error | `Start | `Ready ]; (* decoder state. *)
-    mutable ctx : error_ctx;                   (* the current error context. *)
-    mutable flavour : [ `TTF | `CFF ];                   (* decoded flavour. *)
-    mutable tables : (tag * int * int) list;       (* decoded table records. *)
-    mutable loca_pos : int;                    (* for `TTF fonts, lazy init. *)
-    mutable loca_format : int;                 (* for `TTF fonts, lazy init. *)
-    mutable glyf_pos : int;                    (* for `TTF fonts, lazy init. *)
-    mutable buf : Buffer.t; }                            (* internal buffer. *)
+    mutable ctx : error_ctx; (* the current error context. *)
+    mutable flavour : [ `TTF | `CFF ]; (* decoded flavour. *)
+    mutable tables : (tag * int * int) list; (* decoded table records. *)
+    mutable loca_pos : int; (* for `TTF fonts, lazy init. *)
+    mutable loca_format : int; (* for `TTF fonts, lazy init. *)
+    mutable glyf_pos : int; (* for `TTF fonts, lazy init. *)
+    mutable buf : Buffer.t; (* internal buffer. *) }
 
 let decoder_src d = (`String d.i)
 let decoder src =
   let i , i_pos, i_max = match src with
   | `String s -> s, 0, String.length s - 1
   in
-  { i; i_pos; i_max; t_pos = 0;
+  { in_collection = false; i; i_pos; i_max; t_pos = 0;
     state = `Start; ctx = `Offset_table; flavour = `TTF; tables = [];
     loca_pos = -1; loca_format = -1; glyf_pos = -1;
     buf = Buffer.create 253; }
@@ -282,7 +286,7 @@ let d_uint32 d =
   let s1 = Int32.of_int ((b2 lsl 8) lor b3) in
   Ok (Int32.logor (Int32.shift_left s0 16) s1)
 
-let d_uint32_int d =
+let d_uint32_int d = (* TODO error on 32-bit overflow *)
   if miss d 4 then err_eoi d else
   let b0 = raw_byte d in let b1 = raw_byte d in
   let b2 = raw_byte d in let b3 = raw_byte d in
@@ -339,18 +343,19 @@ let rec d_table_records d count =
   d.tables <- (tag, off, len) :: d.tables;
   d_table_records d (count - 1)
 
-let d_version d =
-  d_uint32 d >>= function
-  | t when t = Tag.v_OTTO -> d.flavour <- `CFF; Ok ()
-  | t when (t = Tag.v_true || t = 0x00010000l) -> d.flavour <- `TTF; Ok ()
-  | t when t = Tag.v_ttcf -> Error `Unsupported_TTC
+let d_version ~no_ttc d =
+  let* t = d_uint32 d in
+  match t with
+  | t when t = Tag.v_OTTO -> d.flavour <- `CFF; Ok `CFF
+  | t when (t = Tag.v_true || t = 0x00010000l) -> d.flavour <- `TTF; Ok `TTF
+  | t when t = Tag.v_ttcf -> if no_ttc then Error `Unsupported_TTC else Ok `TTC
   | t -> Error (`Unknown_flavour t)
 
 let d_structure d =                   (* offset table and table directory. *)
-  d_version      d >>= fun () ->                          (* offset table. *)
-  d_uint16       d >>= fun count ->                          (* numTables. *)
-  d_skip (3 * 2) d >>= fun () ->
-  set_ctx d `Table_directory;                          (* table directory. *)
+  let* _flavour = d_version d ~no_ttc:true in
+  let* count = d_uint16 d in (* number of tables *)
+  let* () = d_skip (3 * 2) d in
+  set_ctx d `Table_directory; (* table directory. *)
   d_table_records d count
 
 let init_decoder d = match d.state with
@@ -361,7 +366,33 @@ let init_decoder d = match d.state with
     | Ok () as ok -> ok
     | Error e -> err_fatal d e
 
-let flavour d = init_decoder d >>= fun () -> Ok d.flavour
+let decoder_collection src =
+  let d = decoder src in
+  set_ctx d `Ttc_header;
+  let* flavour = d_version d ~no_ttc:false in
+  match flavour with
+  | `CFF | `TTF -> Ok [decoder src]
+  | `TTC ->
+      let* version = d_uint32 d in
+      if not (version = 0x00010000l || version = 0x00020000l)
+      then err_version d version else
+      let* count = d_uint32_int d in
+      let rec loop count acc =
+        if count = 0 then (Ok (List.rev acc)) else
+        match d_uint32_int d with
+        | Error _ as e -> e
+        | Ok offset ->
+            let fd = decoder src in
+            set_ctx fd `Ttc_header;
+            match seek_pos offset fd with
+            | Error _ as e -> e
+            | Ok () -> set_ctx fd `Offset_table; loop (count - 1) (fd :: acc)
+      in
+      loop count []
+
+let flavour d = let* () = init_decoder d in Ok d.flavour
+let in_collection d = d.in_collection
+
 
 let table_list d =
   let tags d = List.rev_map (fun (t, _, _) -> t) d.tables in
@@ -377,54 +408,12 @@ let table_raw d tag =
   | None -> Ok None
   | Some len -> d_bytes len d >>= fun bytes -> Ok (Some bytes)
 
-(* convenience *)
-
 let glyph_count d =
   init_decoder d >>=
   seek_required_table Tag.maxp d >>= fun () ->
   d_skip 4 d >>= fun () ->
   d_uint16 d >>= fun count ->
   Ok count
-
-let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
-  init_decoder d >>=
-  seek_required_table Tag.name d >>= fun () ->
-  d_uint16 d >>= fun version ->
-  if version > 1 then err_version d (Int32.of_int version) else
-  d_uint16 d >>= fun ncount ->
-  d_uint16 d >>= fun soff ->
-  let rec loop ncount () =
-    if ncount = 0 then Ok None else
-    let ncount' = ncount - 1 in
-    let look_for the_eid the_lid decode =
-      d_uint16 d >>= fun eid ->
-      if eid <> the_eid then d_skip (4 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun lid ->
-      if lid <> the_lid then d_skip (3 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun nid ->
-      if nid <> 6 then d_skip (2 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun len ->
-      d_uint16 d >>= fun off ->
-      seek_table_pos (soff + off) d >>= fun () ->
-      decode len d >>= fun name ->
-      let invalid name = Error (`Invalid_postscript_name name) in
-      let name_len = String.length name in
-      if name_len > 63 then invalid name else
-      try
-        for i = 0 to name_len - 1 do match Char.code name.[i] with
-        | d when d < 33 || d > 126 -> raise Exit
-        | 91 | 93 | 40 | 41 | 123 | 125 | 60 | 62 | 47 | 37 -> raise Exit
-        | _ -> ()
-        done;
-        Ok (Some name)
-      with Exit -> invalid name
-    in
-    d_uint16 d >>= function
-    | 3 -> look_for 1 0x409 d_utf_16be
-    | 1 -> look_for 0 0 d_bytes
-    | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)
-  in
-  loop ncount ()
 
 (* cmap table *)
 
@@ -1075,6 +1064,50 @@ let loca d gid =
   init_decoder d
   >>= init_loca d
   >>= fun () -> if d.loca_format = 0 then loca_short d gid else loca_long d gid
+
+
+(* Convenience *)
+
+let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
+  init_decoder d >>=
+  seek_required_table Tag.name d >>= fun () ->
+  d_uint16 d >>= fun version ->
+  if version > 1 then err_version d (Int32.of_int version) else
+  d_uint16 d >>= fun ncount ->
+  d_uint16 d >>= fun soff ->
+  let rec loop ncount () =
+    if ncount = 0 then Ok None else
+    let ncount' = ncount - 1 in
+    let look_for the_eid the_lid decode =
+      d_uint16 d >>= fun eid ->
+      if eid <> the_eid then d_skip (4 * 2) d >>= loop ncount' else
+      d_uint16 d >>= fun lid ->
+      if lid <> the_lid then d_skip (3 * 2) d >>= loop ncount' else
+      d_uint16 d >>= fun nid ->
+      if nid <> 6 then d_skip (2 * 2) d >>= loop ncount' else
+      d_uint16 d >>= fun len ->
+      d_uint16 d >>= fun off ->
+      seek_table_pos (soff + off) d >>= fun () ->
+      decode len d >>= fun name ->
+      let invalid name = Error (`Invalid_postscript_name name) in
+      let name_len = String.length name in
+      if name_len > 63 then invalid name else
+      try
+        for i = 0 to name_len - 1 do match Char.code name.[i] with
+        | d when d < 33 || d > 126 -> raise Exit
+        | 91 | 93 | 40 | 41 | 123 | 125 | 60 | 62 | 47 | 37 -> raise Exit
+        | _ -> ()
+        done;
+        Ok (Some name)
+      with Exit -> invalid name
+    in
+    d_uint16 d >>= function
+    | 3 -> look_for 1 0x409 d_utf_16be
+    | 1 -> look_for 0 0 d_bytes
+    | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)
+  in
+  loop ncount ()
+
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2013 The otfm programmers

@@ -1,5 +1,7 @@
 
 
+- Add `Otfm.{decoder_collection,in_collection}` to support OpenType font 
+  collections.
 - Require OCaml >= 4.08.0
 
 

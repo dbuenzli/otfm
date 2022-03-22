@@ -213,7 +213,8 @@ type platform_id = int
 
 (** {1:decode Decode} *)
 
-type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
+type error_ctx =
+  [ `Table of tag | `Ttc_header | `Offset_table | `Table_directory ]
 (** The type for error contexts. *)
 
 type error =
@@ -245,10 +246,28 @@ type decoder
 (** The type for OpenType font decoders. *)
 
 val decoder : [< src ] -> decoder
-(** [decoder src] is a decoder decoding from [src]. *)
+(** [decoder src] is a decoder decoding from [src].
+
+    {b Note.} This errors on
+    {{:https://docs.microsoft.com/en-gb/typography/opentype/spec/otff#font-collections}font collections} with [`Unsupported_TTC]. Use
+    {!decoder_collection} if you need to support font collections. *)
 
 val decoder_src : decoder -> src
 (** [decoder_src d] is [d]'s input source. *)
+
+val decoder_collection : [< src ] -> (decoder list, error) result
+(** [decoder_collection src] decodes either a font or a font collection.  *)
+
+(** {1:flavour Flavour} *)
+
+type flavour = [ `TTF | `CFF ]
+(** The type for OpenType flavours. *)
+
+val flavour : decoder -> (flavour, error) result
+(** [decode_flavour d] is the flavour of the font decoded by [d]. *)
+
+val in_collection : decoder -> bool
+(** [in_collection d] is [true] iff [d] is a font of a collection. *)
 
 (** {1:table_decode Table decoding}
 
@@ -259,12 +278,6 @@ val decoder_src : decoder -> src
     fields are in general not documented please refer to the OpenType
     {{:http://www.microsoft.com/typography/otspec/default.htm}
     specification} for details. *)
-
-type flavour = [ `TTF | `CFF ]
-(** The type for OpenType flavours. *)
-
-val flavour : decoder -> (flavour, error) result
-(** [decode_flavour d] is the flavour of the font decoded by [d]. *)
 
 val table_list : decoder -> (tag list, error) result
 (** [table_list t] is the list of tables of the font decoded by [d]. *)
