@@ -118,6 +118,14 @@ type cp_range = cp * cp
 let is_cp i = 0x0000 <= i && i <= 0x10FFFF
 let pp_cp ppf cp = Format.fprintf ppf "U+%04X" cp
 
+(* Identifiers *)
+
+type encoding_id = int
+type format_id = int
+type glyph_id = int
+type lang = string
+type platform_id = int
+
 (* Decode *)
 
 type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
@@ -421,7 +429,6 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
 
 (* cmap table *)
 
-type glyph_id = int
 type map_kind = [ `Glyph | `Glyph_range ]
 
 let rec d_array el count i a d =
@@ -833,8 +840,6 @@ let lcid_to_bcp47 = [
   0x4009, "en-in";  0x400a, "es-bo";  0x4409, "en-my";  0x440a, "es-sv";
   0x4809, "en-sg";  0x480a, "es-hn";  0x4c0a, "es-ni";  0x500a, "es-pr";
   0x540a, "es-us"; ]
-
-type lang = string
 
 let d_name_langs soff ncount d =
   d_skip (ncount * 6 * 2) d >>= fun () ->

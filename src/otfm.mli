@@ -192,6 +192,25 @@ val is_cp : int -> bool
 val pp_cp : Format.formatter -> cp -> unit
 (** [pp_cp ppf cp] prints an unspecified representation of [cp] on [ppf]. *)
 
+(** {1:identifiers Identifiers}
+
+    Types for various identifiers found in OpenType. *)
+
+type encoding_id = int
+(** The type for encoding ids. *)
+
+type format_id = int
+(** The type for format ids. *)
+
+type glyph_id = int
+(** The type for glyph ids, from [0] to [65534]. *)
+
+type lang = string
+(** The type for {{:http://tools.ietf.org/html/bcp47}BCP 47} language tags. *)
+
+type platform_id = int
+(** The type for platform ids. *)
+
 (** {1:decode Decode} *)
 
 type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
@@ -209,7 +228,7 @@ type error =
 | `Unknown_loca_format of error_ctx * int
 | `Unknown_version of error_ctx * int32
 | `Unsupported_TTC
-| `Unsupported_cmaps of (int * int * int) list
+| `Unsupported_cmaps of (platform_id * encoding_id * format_id) list
 | `Unsupported_glyf_matching_points ]
 (** The type for decoding errors.
 
@@ -258,9 +277,6 @@ val table_raw : decoder -> tag -> (string option, error) result
     string if the table [t] exists. *)
 
 (** {2:cmap cmap table} *)
-
-type glyph_id = int
-(** The type for glyph ids, from [0] to [65534]. *)
 
 type map_kind = [ `Glyph | `Glyph_range ]
 (** The type for map kinds.
@@ -315,7 +331,7 @@ type glyph_descr =
     with the glyph's [(minx, miny, maxx, maxy)]'s bounding box. *)
 
 val glyf : decoder -> glyf_loc -> (glyph_descr, error) result
-(** [glyf d loc] is the glyph descroption located at [loc] by reading
+(** [glyf d loc] is the glyph description located at [loc] by reading
     the {{:http://www.microsoft.com/typography/otspec/glyf.htm}glyf}
     table. Glyph locations are obtainted via {!section-loca}. *)
 
@@ -372,9 +388,6 @@ val hmtx :
     and [lsb] the (signed) left side bearing. *)
 
 (** {2:name name table} *)
-
-type lang = string
-(** The type for {{:http://tools.ietf.org/html/bcp47}BCP 47} language tags. *)
 
 val name :
   decoder -> ('a -> int -> lang -> string -> 'a) -> 'a -> ('a, error) result
