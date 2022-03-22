@@ -213,7 +213,9 @@ let decoder src =
     loca_pos = -1; loca_format = -1; glyf_pos = -1;
     buf = Buffer.create 253; }
 
-let ( >>= ) x f = match x with Ok v -> f v | Error _ as e -> e
+let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
+
 let err e = Error e
 let err_eoi d = Error (`Unexpected_eoi d.ctx)
 let err_version d v = Error (`Unknown_version (d.ctx, v))
