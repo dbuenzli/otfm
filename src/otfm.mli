@@ -192,27 +192,25 @@ val is_cp : int -> bool
 val pp_cp : Format.formatter -> cp -> unit
 (** [pp_cp ppf cp] prints an unspecified representation of [cp] on [ppf]. *)
 
-
-
 (** {1:decode Decode} *)
 
 type error_ctx = [ `Table of tag | `Offset_table | `Table_directory ]
 (** The type for error contexts. *)
 
-type error = [
-  | `Unknown_flavour of tag
-  | `Unsupported_TTC
-  | `Unsupported_cmaps of (int * int * int) list
-  | `Unsupported_glyf_matching_points
-  | `Missing_required_table of tag
-  | `Unknown_version of error_ctx * int32
-  | `Unknown_loca_format of error_ctx * int
-  | `Unknown_composite_format of error_ctx * int
-  | `Invalid_offset of error_ctx * int
-  | `Invalid_cp of int
-  | `Invalid_cp_range of int * int
-  | `Invalid_postscript_name of string
-  | `Unexpected_eoi of error_ctx ]
+type error =
+[ `Invalid_cp of int
+| `Invalid_cp_range of int * int
+| `Invalid_offset of error_ctx * int
+| `Invalid_postscript_name of string
+| `Missing_required_table of tag
+| `Unexpected_eoi of error_ctx
+| `Unknown_composite_format of error_ctx * int
+| `Unknown_flavour of tag
+| `Unknown_loca_format of error_ctx * int
+| `Unknown_version of error_ctx * int32
+| `Unsupported_TTC
+| `Unsupported_cmaps of (int * int * int) list
+| `Unsupported_glyf_matching_points ]
 (** The type for decoding errors.
 
     {b Note.} In case of [`Invalid_poscript_name] a string of {e bytes} is
