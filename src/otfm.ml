@@ -19,10 +19,7 @@ let unsafe_byte s j = Char.code (String.unsafe_get s j)
 (* Pretty printers *)
 
 let pp = Format.fprintf
-let rec pp_list ?(pp_sep = Format.pp_print_cut) pp_v ppf = function
-| [] -> ()
-| v :: vs ->
-    pp_v ppf v; if vs <> [] then (pp_sep ppf (); pp_list ~pp_sep pp_v ppf vs)
+let pp_list = Format.pp_print_list
 
 (* OpenType tags *)
 
