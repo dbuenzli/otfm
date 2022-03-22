@@ -1,4 +1,4 @@
-version = "%%VERSION%%"
+version = "%%VERSION_NUM%%"
 description = "OpenType font decoder for OCaml"
 requires = "uutf"
 archive(byte) = "otfm.cma"

@@ -4,8 +4,6 @@ Otfm is an in-memory decoder for the OpenType font data format. It
 provides low-level access to font tables and functions to decode some
 of them.
 
-{1:api API}
-
 {!modules:
 Otfm
 }

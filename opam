@@ -1,19 +1,30 @@
 opam-version: "2.0"
+name: "otfm"
+synopsis: "OpenType font decoder for OCaml"
+description: """\
+Otfm is an in-memory decoder for the OpenType font data format. It
+provides low-level access to font tables and functions to decode some
+of them.
+
+Otfm is made of a single module and depends on [Uutf][uutf]. It is distributed 
+under the ISC license.
+
+[uutf]: https://erratique.ch/software/uutf
+     
+Homepage: <https://erratique.ch/software/otfm>"""
 maintainer: "Daniel Bünzli <daniel.buenzl i@erratique.ch>"
-homepage: "https://erratique.ch/software/otfm"
-authors: ["The otfm programmers"]
-doc: "https://erratique.ch/software/otfm/doc"
-dev-repo: "git+https://erratique.ch/repos/otfm.git"
-bug-reports: "https://github.com/dbuenzli/otfm/issues"
-tags: [ "OpenType" "ttf" "font" "decoder" "graphics" "org:erratique" ]
+authors: "The otfm programmers"
 license: "ISC"
+tags: ["OpenType" "ttf" "font" "decoder" "graphics" "org:erratique"]
+homepage: "https://erratique.ch/software/otfm"
+doc: "https://erratique.ch/software/otfm/doc"
+bug-reports: "https://github.com/dbuenzli/otfm/issues"
 depends: [
- "ocaml" {>= "4.08.0"}
- "ocamlfind" {build}
- "ocamlbuild" {build}
- "topkg" {build}
- "uutf" {>= "1.0.0"}
+  "ocaml" {>= "4.08.0"}
+  "ocamlfind" {build}
+  "ocamlbuild" {build}
+  "topkg" {>= build & >= "1.0.3"}
+  "uutf" {>= "1.0.0"}
 ]
-build: [[
-  "ocaml" "pkg/pkg.ml" "build"
-          "--pinned" "%{pinned}%" ]]
+build: ["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"]
+dev-repo: "git+https://erratique.ch/repos/otfm.git"
