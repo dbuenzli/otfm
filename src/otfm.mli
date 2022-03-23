@@ -173,7 +173,7 @@ end
     code points} to be mapped to glyphs. Hence we deal with Unicode
     {{:http://unicode.org/glossary/#code_point}code points} not
     {{:http://unicode.org/glossary/#unicode_scalar_value} scalar
-    values}. *)
+    values} (i.e. {!Uchar.t} values). *)
 
 type cp = int
 (** The type for Unicode
@@ -306,12 +306,13 @@ type map_kind = [ `Glyph | `Glyph_range ]
 
 val cmap :
   decoder -> ('a -> map_kind -> cp_range -> glyph_id -> 'a) ->
-  'a -> ((int * int * int) * 'a, error) result
+  'a -> ((platform_id * encoding_id * format_id) * 'a, error) result
 (** [cmap d f acc] folds over a mapping from unicode
     scalar values to glyph ids by reading the
     {{:http://www.microsoft.com/typography/otspec/cmap.htm}cmap} table.
-    The returned triple of integer indicates the platform id, encoding
-    id and format of the cmap used.
+
+    {b Tip.}  Use the convience {!cmap_fold_uchars} function to
+    directly get a map from {!Uchar.t} to glyph identifiers.
 
     {b Limitations.} Only the format 13 (last resort font), format 12
     (UCS-4) and format 4 (UCS-2) cmap table formats are supported.
@@ -509,6 +510,20 @@ val postscript_name : decoder -> (string option, error) result
     as mandated by the OTF standard, don't rely on {!section-name} if you really
     need this information. *)
 
+val cmap_fold_uchars :
+  decoder ->
+  uchar:(Uchar.t -> glyph_id -> 'a -> 'a) ->
+  surrogate:(cp -> glyph_id -> 'b -> 'b) ->
+  'a -> 'b ->
+  ((platform_id * encoding_id * format_id) * ('a * 'b), error) result
+(** [cmap_uchar_fold d ~uchar ~surrogate uacc cacc] is [src, (us, cps)] with
+    {ul
+    {- [src] identifying the source table of the data.}
+    {- [us] the result of the [uchar] fold starting with [acc]}
+    {- [cps] the result of the [surrogate] fold staring with [cps]}}
+
+    This uses {!val-cmap}, see the limitations there. *)
+
 (** {1:limitations Limitations}
 
     As it stands [Otfm] has the following limitations.  Some of these
@@ -521,8 +536,7 @@ val postscript_name : decoder -> (string option, error) result
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font
        files tend to be smaller than 16 Mo).}
-    {- Table checksums are not verified.}}
-*)
+    {- Table checksums are not verified.}} *)
 
 (** {1:examples Examples}
 

@@ -1,6 +1,7 @@
 
 
 - Require OCaml >= 4.08.0
+- Add the `Otfm.cmap_fold_uchars` convenience function.
 - Add `Otfm.error_to_string`.
 - Add `Otfm.{decoder_collection,in_collection}` to support OpenType font 
   collections.

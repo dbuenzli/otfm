@@ -150,6 +150,14 @@ let pp_ctx ppf = function
 | `Ttc_header -> pp ppf "TTC header"
 
 let pp_error ppf = function
+| `Invalid_cp u ->
+    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
+| `Invalid_cp_range (u0, u1) ->
+    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
+| `Invalid_offset (ctx, o) ->
+    pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
+| `Invalid_postscript_name n ->
+    pp ppf "@[Invalid@ PostScript@ name (%S)@]" n
 | `Unknown_flavour tag ->
     pp ppf "@[Unknown@ OpenType@ flavour (%a)@]" Tag.pp tag
 | `Missing_required_table tag ->
@@ -168,18 +176,12 @@ let pp_error ppf = function
     pp ppf "@[Unknown@ loca table format (%d)@ in@ %a@]" v pp_ctx ctx
 | `Unknown_composite_format (ctx, v) ->
     pp ppf "@[Unknown@ composite glyph format (%d)@ in@ %a@]" v pp_ctx ctx
-| `Invalid_offset (ctx, o) ->
-    pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
-| `Invalid_cp u ->
-    pp ppf "@[Invalid@ Unicode@ code@ point@ (%a)@]" pp_cp u
-| `Invalid_cp_range (u0, u1) ->
-    pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
-| `Invalid_postscript_name n ->
-    pp ppf "@[Invalid@ PostScript@ name (%S)@]" n
 | `Unexpected_eoi ctx ->
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx
 
 let error_to_string e = Format.asprintf "%a" pp_error e
+
+exception Err of error
 
 (* N.B. Offsets and lengths are decoded as OCaml ints. On 64 bits
    platforms they fit, on 32 bits we are limited by string size
@@ -397,7 +399,6 @@ let decoder_collection src =
 
 let flavour d = let* () = init_decoder d in Ok d.flavour
 let in_collection d = d.in_collection
-
 
 let table_list d =
   let tags d = List.rev_map (fun (t, _, _) -> t) d.tables in
@@ -1070,7 +1071,6 @@ let loca d gid =
   >>= init_loca d
   >>= fun () -> if d.loca_format = 0 then loca_short d gid else loca_long d gid
 
-
 (* Convenience *)
 
 let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
@@ -1113,6 +1113,26 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
   in
   loop ncount
 
+let cmap_fold_uchars d ~uchar ~surrogate uacc cacc =
+  let add_cmap (uacc, cacc) kind (u0, u1) g =
+    let uacc = ref uacc in
+    let cacc = ref cacc in
+    begin match kind with
+    | `Glyph_range ->
+        for i = 0 to (u1 - u0) do
+          let u = u0 + i and gid = g + i in match Uchar.is_valid u with
+          | true -> uacc := uchar (Uchar.unsafe_of_int u) gid !uacc
+          | false -> cacc := surrogate u gid !cacc
+        done
+    | `Glyph ->
+        for u = u0 to u1 do match Uchar.is_valid u with
+        | true -> uacc := uchar (Uchar.unsafe_of_int u) g !uacc
+        | false -> cacc := surrogate u g !cacc
+        done
+    end;
+    !uacc, !cacc
+  in
+  cmap d add_cmap (uacc, cacc)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2013 The otfm programmers
