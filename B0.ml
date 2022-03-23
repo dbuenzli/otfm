@@ -21,7 +21,7 @@ let test_src f = `File (Fpath.v (Fmt.str "test/%s" f))
 
 let otftrip =
   let srcs = [test_src "otftrip.ml"] in
-  let requires = [cmdliner; otfm] in
+  let requires = [cmdliner; uutf; otfm] in
   let meta =
     B0_meta.(empty |> tag test |>
              add B0_unit.Action.exec_cwd B0_unit.Action.scope_cwd)
