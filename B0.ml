@@ -4,6 +4,7 @@ open Result.Syntax
 
 (* OCaml library names *)
 
+let cmdliner = B0_ocaml.libname "cmdliner"
 let uutf = B0_ocaml.libname "uutf"
 let otfm = B0_ocaml.libname "otfm"
 
@@ -20,7 +21,7 @@ let test_src f = `File (Fpath.v (Fmt.str "test/%s" f))
 
 let otftrip =
   let srcs = [test_src "otftrip.ml"] in
-  let requires = [ otfm ] in
+  let requires = [cmdliner; otfm] in
   let meta =
     B0_meta.(empty |> tag test |>
              add B0_unit.Action.exec_cwd B0_unit.Action.scope_cwd)
@@ -30,7 +31,7 @@ let otftrip =
 
 let example =
   let srcs = [test_src "examples.ml"] in
-  let requires = [ otfm ] in
+  let requires = [otfm] in
   let meta = B0_meta.empty |> B0_meta.tag B0_meta.test in
   let doc = "Sample code" in
   B0_ocaml.exe "examples" ~doc ~meta ~srcs ~requires
@@ -60,6 +61,8 @@ let default =
         "topkg", {|>= build & >= "1.0.3"|};
         "uutf", {|>= "1.0.0"|};
       ]
+    |> add B0_opam.Meta.depopts [ "cmdliner", ""]
+    |> add B0_opam.Meta.conflicts [ "cmdliner", {|< "1.1.0"|} ]
   in
   B0_pack.v "default" ~doc:"otfm package" ~meta ~locked:true @@
   B0_unit.list ()

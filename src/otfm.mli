@@ -211,7 +211,7 @@ type lang = string
 type platform_id = int
 (** The type for platform ids. *)
 
-(** {1:decode Decode} *)
+(** {1:decoding Decoding} *)
 
 type error_ctx =
   [ `Table of tag | `Ttc_header | `Offset_table | `Table_directory ]
@@ -238,6 +238,9 @@ type error =
 
 val pp_error : Format.formatter -> [< error] -> unit
 (** [pp_error ppf e] prints an uspecified representation of [e] on [ppf].*)
+
+val error_to_string : error -> string
+(** [error_to_string e] is a human error message for [e]. *)
 
 type src = [ `String of string ]
 (** The type for input sources. *)
@@ -509,13 +512,12 @@ val postscript_name : decoder -> (string option, error) result
 (** {1:limitations Limitations}
 
     As it stands [Otfm] has the following limitations.  Some of these
-    may be lifted in the future and a few of these can be overcome
-    by pre-processing your font (e.g. extract [.ttc] files to [.ttf], or
-    removing hinting information to reduce the font size). See also
-    the individual table decoding functions for other limitations.
+    may be lifted in the future and a few of these can be overcome by
+    pre-processing your font (e.g.  removing hinting information to
+    reduce the font size). See also the individual table decoding
+    functions for other limitations.
 
     {ul
-    {- True Type collections ([.ttc] files) are not supported}
     {- The whole font needs to be loaded in memory as a string. This may
        be a limiting factor on 32 bits platforms (but non [.ttc] font
        files tend to be smaller than 16 Mo).}

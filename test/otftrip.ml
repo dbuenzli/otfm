@@ -3,34 +3,63 @@
    Distributed under the ISC license, see terms at the end of the file.
   ---------------------------------------------------------------------------*)
 
+let ( let* ) = Result.bind
 let pp = Format.fprintf
-let str = Format.sprintf
+let strf = Format.asprintf
+let string_of_file inf =
+  try
+    let ic = if inf = "-" then stdin else open_in_bin inf in
+    let finally () = if inf <> "-" then close_in_noerr ic else () in
+    Fun.protect ~finally @@ fun () ->
+    let buf_size = 65536 in
+    let b = Buffer.create buf_size in
+    try while true do Buffer.add_channel b ic buf_size done; assert false with
+    | End_of_file -> Ok (Buffer.contents b)
+  with
+  | Failure _ -> Error (strf "%s: input file too large" inf)
+  | Sys_error e -> (Error e)
 
 let exec = Filename.basename Sys.executable_name
 let log msg = Format.eprintf ("%s: " ^^ msg ^^ "@.") exec
 let log_err inf e =
   Format.eprintf "@[<2>%s:%s:@ %a@]@." exec inf Otfm.pp_error e
 
-let string_of_file inf =
-  try
-    let ic = if inf = "-" then stdin else open_in_bin inf in
-    let close ic = if inf <> "-" then close_in ic else () in
-    let buf_size = 65536 in
-    let b = Buffer.create buf_size in
-    let s = Bytes.create buf_size in
-    try
-      while true do
-        let c = input ic s 0 buf_size in
-        if c = 0 then raise Exit else
-        Buffer.add_substring b (Bytes.unsafe_to_string s) 0 c
-      done;
-      assert false
-    with
-    | Exit -> close ic; Ok (Buffer.contents b)
-    | Failure _ -> close ic; Error (`Msg (str "%s: input file too large" inf))
-    | Sys_error e -> close ic; (Error (`Msg e));
-  with
-  | Sys_error e -> (Error (`Msg e))
+let log_if_error ~use inf = function
+| Ok v -> v
+| Error e -> Format.eprintf "@[<2>%s:%s:@ %s@]@." exec inf e; use
+
+let file_err file = Result.map_error (strf "%s: %a" file Otfm.pp_error)
+
+let process_file_fonts ~keep_going process file =
+  let* data = string_of_file file in
+  let* ds = Otfm.decoder_collection (`String data) |> file_err file in
+  let rec loop errs = function
+  | [] -> errs
+  | d :: ds ->
+      match process file d with
+      | Ok () -> loop errs ds
+      | Error e ->
+          if e <> "" then Format.eprintf "%s@." e;
+          if keep_going then loop (errs + 1) ds else errs + 1
+  in
+  let errs = loop 0 ds in
+  if errs <> 0 then Error "" else Ok ()
+
+let process_files ~keep_going process files =
+  let rec loop errs = function
+  | [] -> errs
+  | f :: fs ->
+      match process_file_fonts ~keep_going process f with
+      | Ok () -> loop errs fs
+      | Error e ->
+          if e <> "" then Format.eprintf "%s@." e;
+          if keep_going then loop (errs + 1) fs else errs + 1
+  in
+  let errs = loop 0 files in
+  if errs <> 0
+  then Cmdliner.Cmd.Exit.some_error
+  else Cmdliner.Cmd.Exit.ok
+
 
 (* Table pretty printers *)
 
@@ -215,80 +244,168 @@ let pp_kern ppf has_kern d =
 
 let pp_tables ppf inf ts d =
   let err = ref false in
-  let ( >>= ) x f = match x with
-  | Ok () -> f ()
-  | Error e -> log_err inf e; err := true; f ()
+  let log_if_error = function
+  | Ok () -> ()
+  | Error e -> log_err inf e; err := true
   in
-  pp_name ppf d >>= fun () ->
-  pp_head ppf d >>= fun () ->
-  pp_hhea ppf d >>= fun () ->
-  pp_os2  ppf d >>= fun () ->
-  pp_cmap ppf d >>= fun () ->
-  pp_hmtx ppf d >>= fun () ->
-  pp_glyf ppf (List.mem Otfm.Tag.glyf ts) d >>= fun () ->
-  pp_kern ppf (List.mem Otfm.Tag.kern ts) d >>= fun () ->
-  if !err then (Error `Reported) else Ok ()
+  log_if_error @@ pp_name ppf d;
+  log_if_error @@ pp_head ppf d;
+  log_if_error @@ pp_hhea ppf d;
+  log_if_error @@ pp_os2  ppf d;
+  log_if_error @@ pp_cmap ppf d;
+  log_if_error @@ pp_hmtx ppf d;
+  log_if_error @@ pp_glyf ppf (List.mem Otfm.Tag.glyf ts) d;
+  log_if_error @@ pp_kern ppf (List.mem Otfm.Tag.kern ts) d;
+  if !err then (Error "") else Ok ()
 
-(* Commands *)
+(* Decode *)
 
-let pp_file ppf inf = match string_of_file inf with
-| Error _ as e -> e
-| Ok s ->
-    let ( >>= ) x f = match x with
-    | Ok v -> f v
-    | Error e -> Error (e :> [ Otfm.error | `Reported | `Msg of string])
-    in
-    let d = Otfm.decoder (`String s) in
-    Otfm.flavour d >>= fun f ->
-    pp ppf "@[<v1>(@[<1>(file %S)@]" inf;
-    let fs = match f with `TTF -> "TTF" | `CFF -> "CFF" in
-    pp ppf "@,@[<1>(flavor %s)@]" fs;
-    Otfm.postscript_name d >>= fun name ->
-    let oname = match name with None -> "<none>" | Some n -> n in
-    pp ppf "@,@[<1>(postscript-name %s)@]" oname;
-    Otfm.glyph_count d >>= fun glyph_count ->
-    pp ppf "@,@[<1>(glyph-count %d)@]" glyph_count;
-    Otfm.table_list d >>= fun ts ->
-    pp ppf "@,@[<1>(tables ";
-    List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts;
-    pp ppf ")@]";
-    pp_tables ppf inf ts d >>= fun () ->
-    pp ppf ")@]@.";
-    Ok ()
+let decode_pp ppf inf d =
+  let err r =
+    Result.map_error (fun e -> strf "%s: %a" inf Otfm.pp_error e) r
+  in
+  let* f = Otfm.flavour d |> err in
+  pp ppf "@[<v1>(@[<1>(file %S)@]" inf;
+  let fs = match f with `TTF -> "TTF" | `CFF -> "CFF" in
+  pp ppf "@,@[<1>(flavor %s)@]" fs;
+  let* name = Otfm.postscript_name d |> err in
+  let oname = match name with None -> "<none>" | Some n -> n in
+  pp ppf "@,@[<1>(postscript-name %s)@]" oname;
+  let* glyph_count = Otfm.glyph_count d |> err in
+  pp ppf "@,@[<1>(glyph-count %d)@]" glyph_count;
+  let* ts = Otfm.table_list d |> err in
+  pp ppf "@,@[<1>(tables ";
+  List.iter (fun t -> pp ppf "@ %a" Otfm.Tag.pp t) ts;
+  pp ppf ")@]";
+  let* () = pp_tables ppf inf ts d in
+  pp ppf ")@]@.";
+  Ok ()
 
-let dec_file inf = match string_of_file inf with
-| Error _ as e -> e
-| Ok s ->
-    let err = ref false in
-    let ( >>= ) x f = match x with
-    | Ok _ -> f ()
-    | Error e -> log_err inf e; err := true; f ()
-    in
-    let kern_nop () _ = `Fold, () in
-    let nop4 _ _ _ _ = () in
-    let d = Otfm.decoder (`String s) in
-    Otfm.flavour d      >>= fun () ->
-    Otfm.table_list d   >>= fun () ->
-    Otfm.cmap d nop4 () >>= fun () ->
-    Otfm.head d         >>= fun () ->
-    Otfm.hhea d         >>= fun () ->
-    Otfm.hmtx d nop4 () >>= fun () ->
-    Otfm.name d nop4 () >>= fun () ->
-    Otfm.os2  d         >>= fun () ->
-    Otfm.kern d kern_nop nop4 () >>= fun () ->
-    if !err then (Error `Reported) else Ok ()
+let decode_only file d =
+  let err = ref false in
+  let log_if_error = function
+  | Ok _ -> () | Error e -> log_err file e; err := true
+  in
+  let kern_nop () _ = `Fold, () in
+  let nop4 _ _ _ _ = () in
+  log_if_error @@ Otfm.flavour d;
+  log_if_error @@ Otfm.table_list d;
+  log_if_error @@ Otfm.cmap d nop4 ();
+  log_if_error @@ Otfm.head d;
+  log_if_error @@ Otfm.hhea d;
+  log_if_error @@ Otfm.hmtx d nop4 ();
+  log_if_error @@ Otfm.name d nop4 ();
+  log_if_error @@ Otfm.os2 d;
+  log_if_error @@ Otfm.kern d kern_nop nop4 ();
+  if !err then Error "" else Ok ()
 
-let ps_file inf = match string_of_file inf with
-| Error _ as e -> e
-| Ok s ->
-    let d = Otfm.decoder (`String s) in
-    match Otfm.postscript_name d with
-    | Error e -> Error (e :> [ Otfm.error | `Reported | `Msg of string])
-    | Ok None -> Printf.printf "%s: <none>\n" inf; Ok ()
-    | Ok (Some n) -> Printf.printf "%s: %s\n" inf n; Ok ()
+(* Decode *)
 
-(* otftrip *)
+let decode_font output_format only file d = match only with
+| true -> decode_only file d
+| false -> decode_pp Format.std_formatter file d
 
+let decode keep_going output_format only files =
+  process_files ~keep_going (decode_font output_format only) files
+
+(* Sniff *)
+
+let pp_flavour ppf f =
+  Format.pp_print_string ppf (match f with `CFF -> "cff" | `TTF -> "ttf")
+
+let sniff_font output_format show_path file d =
+  file_err file @@
+  let* flavour = Otfm.flavour d in
+  let* glyph_count = Otfm.glyph_count d in
+  let* name = Otfm.postscript_name d in
+  let name = Option.value ~default:"<unknown>" name in
+  let* tables = Otfm.table_list d in
+  let tables = String.concat " " (List.map (strf "%a" Otfm.Tag.pp) tables) in
+  let file = if show_path then strf "%s: " file else "" in
+  Format.printf "@[<h>%s%s %a glyphs:%d %s@]@."
+    file name pp_flavour flavour glyph_count tables;
+  Ok ()
+
+let sniff keep_going output_format show_path files =
+  process_files ~keep_going (sniff_font output_format show_path) files
+
+(* Command line interface *)
+
+open Cmdliner
+
+let s_output_format_options = "OUTPUT FORMAT OPTIONS"
+let output_format =
+  let docs = s_output_format_options in
+  let short =
+    let doc = "Short output. Line based output with only relevant data." in
+    Arg.info ["s"; "short"] ~doc ~docs
+  in
+  let long =
+    let doc = "Long output. Outputs as much information as possible." in
+    Arg.info ["l"; "long"] ~doc ~docs
+  in
+  Arg.(value & vflag `Normal [`Short, short; `Long, long])
+
+let keep_going =
+  let doc = "Do not stop if a file or a font in a collection fails decoding." in
+  Arg.(value & flag & info ["k"; "keep-going"] ~doc)
+
+let files =
+  let doc = "Decode OpenType file $(docv). Use $(b,-) for stdin." in
+  let docv = "FILE" in
+  Arg.(non_empty & pos_all string [] & info [] ~doc ~docv)
+
+let decode_cmd =
+  let doc = "Output font information and all decodable tables" in
+  let man =
+    [ `S Manpage.s_description;
+      `P "$(mname) $(tname) outputs font information and all decodable tables.";
+      `S Manpage.s_options;
+      `S s_output_format_options;
+    ]
+  in
+  let only =
+    let doc = "Decode only. Do not output data." in
+    Arg.(value & flag & info ["d"; "only"] ~doc)
+  in
+  Cmd.v (Cmd.info "decode" ~man ~doc)
+    Term.(const decode $ keep_going $ output_format $ only $ files)
+
+let sniff_cmd =
+  let doc = "Output basic OpenType information about fonts" in
+  let man =
+    [ `S Manpage.s_description;
+      `P "$(mname) $(tname)y outputs the PostScript name, flavour, glyph
+          count and table names of one or more file's fonts.";
+      `S Manpage.s_options;
+      `S s_output_format_options;
+    ]
+  in
+  let show_path =
+    let doc = "Show font file path in output." in
+    Arg.(value & flag & info ["p"; "show-path"] ~doc)
+  in
+  Cmd.v (Cmd.info "sniff" ~man ~doc)
+    Term.(const sniff $ keep_going $ output_format $ show_path $ files)
+
+let cmds = [sniff_cmd; decode_cmd]
+let cmd =
+  let doc = "OpenType font file decoder" in
+  let man =
+    [ `S Manpage.s_description;
+      `P "$(mname) decodes OpenType files ($(b,.otf), $(b,.ttf), $(b,.otc), \
+          $(b,.ttc)) and outputs their font data in various ways.";
+      `S Manpage.s_bugs;
+      `P "This program is distributed with the Otfm OCaml library. \
+          See https:/erratique.ch/software/otfm for contact information"; ]
+  in
+  Cmd.group Cmd.(info "otftrip" ~man ~doc ~version:"%%VERSION%%") cmds
+
+
+let main () = exit (Cmd.eval' cmd)
+let () = if !Sys.interactive then () else main ()
+
+(*
 let main () =
   let usage = Printf.sprintf
     "Usage: %s [OPTION]... [OTFFILE]...\n\
@@ -321,6 +438,7 @@ let main () =
   if err then exit 1 else exit 0
 
 let () = main ()
+*)
 
 (*---------------------------------------------------------------------------
    Copyright (c) 2013 The otfm programmers

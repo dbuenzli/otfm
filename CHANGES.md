@@ -1,9 +1,12 @@
 
 
+- Require OCaml >= 4.08.0
+- Add `Otfm.error_to_string`.
 - Add `Otfm.{decoder_collection,in_collection}` to support OpenType font 
   collections.
-- Require OCaml >= 4.08.0
-
+- `otftrip` tool overhaul. Among other things supports OpenType font
+  collection decodes and depends on `cmdliner`. The command line
+  interface is incompatible. See `otftrip --help` for details.
 
 v0.4.0 2020-03-23 Concise
 -------------------------

@@ -179,6 +179,8 @@ let pp_error ppf = function
 | `Unexpected_eoi ctx ->
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx
 
+let error_to_string e = Format.asprintf "%a" pp_error e
+
 (* N.B. Offsets and lengths are decoded as OCaml ints. On 64 bits
    platforms they fit, on 32 bits we are limited by string size
    anyway. *)
@@ -255,6 +257,9 @@ let d_bytes len d =
   if miss d len then err_eoi d else
   let start = d.i_pos in
   (d.i_pos <- d.i_pos + len; Ok (String.sub d.i start len))
+
+(* XXX once we require 4.13 we should use string integer decoders. At that
+   point we should also consider switching to bigbytes. *)
 
 let d_uint8 d = if miss d 1 then err_eoi d else Ok (raw_byte d)
 let d_int8 d = match d_uint8 d with
