@@ -1074,26 +1074,26 @@ let loca d gid =
 (* Convenience *)
 
 let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
-  init_decoder d >>=
-  seek_required_table Tag.name d >>= fun () ->
-  d_uint16 d >>= fun version ->
+  let* () = init_decoder d in
+  let* () = seek_required_table Tag.name d () in
+  let* version = d_uint16 d in
   if version > 1 then err_version d (Int32.of_int version) else
-  d_uint16 d >>= fun ncount ->
-  d_uint16 d >>= fun soff ->
-  let rec loop ncount () =
+  let* ncount = d_uint16 d in
+  let* soff = d_uint16 d in
+  let rec loop ncount =
     if ncount = 0 then Ok None else
     let ncount' = ncount - 1 in
     let look_for the_eid the_lid decode =
-      d_uint16 d >>= fun eid ->
-      if eid <> the_eid then d_skip (4 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun lid ->
-      if lid <> the_lid then d_skip (3 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun nid ->
-      if nid <> 6 then d_skip (2 * 2) d >>= loop ncount' else
-      d_uint16 d >>= fun len ->
-      d_uint16 d >>= fun off ->
-      seek_table_pos (soff + off) d >>= fun () ->
-      decode len d >>= fun name ->
+      let* eid = d_uint16 d in
+      if eid <> the_eid then let* () = d_skip (4 * 2) d in loop ncount' else
+      let* lid = d_uint16 d in
+      if lid <> the_lid then let* () = d_skip (3 * 2) d in loop ncount' else
+      let* nid = d_uint16 d in
+      if nid <> 6 then let* () = d_skip (2 * 2) d in loop ncount' else
+      let* len = d_uint16 d in
+      let* off = d_uint16 d in
+      let* () = seek_table_pos (soff + off) d in
+      let* name = decode len d in
       let invalid name = Error (`Invalid_postscript_name name) in
       let name_len = String.length name in
       if name_len > 63 then invalid name else
@@ -1106,12 +1106,12 @@ let postscript_name d = (* rigorous postscript name lookup, see OT spec p. 39 *)
         Ok (Some name)
       with Exit -> invalid name
     in
-    d_uint16 d >>= function
+    Result.bind (d_uint16 d) @@ function
     | 3 -> look_for 1 0x409 d_utf_16be
     | 1 -> look_for 0 0 d_bytes
-    | _ -> d_skip (5 * 2) d >>= loop (ncount - 1)
+    | _ -> let* () = d_skip (5 * 2) d in loop (ncount - 1)
   in
-  loop ncount ()
+  loop ncount
 
 
 (*---------------------------------------------------------------------------
