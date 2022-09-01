@@ -206,6 +206,7 @@ type decoder =
     mutable loca_pos : int; (* for `TTF fonts, lazy init. *)
     mutable loca_format : int; (* for `TTF fonts, lazy init. *)
     mutable glyf_pos : int; (* for `TTF fonts, lazy init. *)
+    mutable cff_charstring_index : int; (* for `CFF fonts, lazy init. *)
     mutable buf : Buffer.t; (* internal buffer. *) }
 
 let decoder_src d = (`String d.i)
@@ -215,7 +216,7 @@ let decoder src =
   in
   { in_collection = false; i; i_pos; i_max; t_pos = 0;
     state = `Start; ctx = `Offset_table; flavour = `TTF; tables = [];
-    loca_pos = -1; loca_format = -1; glyf_pos = -1;
+    loca_pos = -1; loca_format = -1; glyf_pos = -1; cff_charstring_index = -1;
     buf = Buffer.create 253; }
 
 let ( >>= ) = Result.bind
@@ -420,6 +421,18 @@ let glyph_count d =
   let* () = d_skip 4 d in
   let* count = d_uint16 d in
   Ok count
+
+(* CFF table *)
+
+let init_cff d =
+  let* () = seek_required_table Tag.cff d () in
+  let* version = d_uint16 d in
+  Ok ()
+
+let cff d =
+  let* () = init_decoder d in
+  let* () = init_cff d in
+  Ok ""
 
 (* cmap table *)
 

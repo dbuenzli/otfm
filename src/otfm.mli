@@ -292,6 +292,17 @@ val table_raw : decoder -> tag -> (string option, error) result
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
+(** {2:cff CFF table} *)
+
+val cff : decoder -> (string, error) result
+
+(*
+val cff_charstring : decoder -> glyph_id -> (glyf_loc option, error) result
+(** [loca d gid] looks up the location of the glyph with id [gid] by
+    reading the {{:http://www.microsoft.com/typography/otspec/loca.htm}loca}
+    table. The result can be used with {!val:glyf} to lookup the glyph. *)
+*)
+
 (** {2:cmap cmap table} *)
 
 type map_kind = [ `Glyph | `Glyph_range ]
