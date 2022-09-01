@@ -415,10 +415,10 @@ let table_raw d tag =
   | Some len -> d_bytes len d >>= fun bytes -> Ok (Some bytes)
 
 let glyph_count d =
-  init_decoder d >>=
-  seek_required_table Tag.maxp d >>= fun () ->
-  d_skip 4 d >>= fun () ->
-  d_uint16 d >>= fun count ->
+  let* () = init_decoder d in
+  let* () = seek_required_table Tag.maxp d () in
+  let* () = d_skip 4 d in
+  let* count = d_uint16 d in
   Ok count
 
 (* cmap table *)
@@ -1037,39 +1037,38 @@ let kern d t p acc =
 
 (* loca table *)
 
-let d_loca_format d () =
-  d_uint16 d >>= fun f -> if f > 1 then err_loca_format d f else Ok f
+let d_loca_format d =
+  let* f = d_uint16 d in
+  if f > 1 then err_loca_format d f else Ok f
 
 let init_loca d () =
   if d.loca_pos <> -1 then Ok () else
-  seek_required_table Tag.head d ()
-  >>= fun () -> d_skip 50 d
-  >>= d_loca_format d
-  >>= fun loca_format ->
+  let* () = seek_required_table Tag.head d () in
+  let* () = d_skip 50 d in
+  let* loca_format = d_loca_format d in
   d.loca_format <- loca_format;
-  seek_required_table Tag.loca d ()
-  >>= fun () -> d.loca_pos <- d.i_pos;
+  let* () = seek_required_table Tag.loca d () in
+  d.loca_pos <- d.i_pos;
   Ok ()
 
 let loca_short d gid =
-  seek_pos (d.loca_pos + gid * 2) d
-  >>= fun () -> d_uint16 d
-  >>= fun o1 -> d_uint16 d
-  >>= fun o2 ->
+  let* () = seek_pos (d.loca_pos + gid * 2) d in
+  let* o1 = d_uint16 d in
+  let* o2 = d_uint16 d in
   let o1 = o1 * 2 in
   let o2 = o2 * 2 in
   if o1 = o2 then Ok None else Ok (Some o1)
 
 let loca_long d gid =
-  seek_pos (d.loca_pos + gid * 4) d
-  >>= fun () -> d_uint32_int d
-  >>= fun o1 -> d_uint32_int d
-  >>= fun o2 -> if o1 = o2 then Ok None else Ok (Some o1)
+  let* () = seek_pos (d.loca_pos + gid * 4) d in
+  let* o1 = d_uint32_int d in
+  let* o2 = d_uint32_int d in
+  if o1 = o2 then Ok None else Ok (Some o1)
 
 let loca d gid =
-  init_decoder d
-  >>= init_loca d
-  >>= fun () -> if d.loca_format = 0 then loca_short d gid else loca_long d gid
+  let* () = init_decoder d in
+  let* () = init_loca d () in
+  if d.loca_format = 0 then loca_short d gid else loca_long d gid
 
 (* Convenience *)
 
