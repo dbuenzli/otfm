@@ -1,5 +1,4 @@
 open B0_kit.V000
-open B00_std
 open Result.Syntax
 
 (* OCaml library names *)
@@ -20,14 +19,15 @@ let otfm_lib =
 let test_src f = `File (Fpath.v (Fmt.str "test/%s" f))
 
 let otftrip =
+  let doc = "Prints OTF tables in human readable format." in
   let srcs = [test_src "otftrip.ml"] in
   let requires = [cmdliner; uutf; otfm] in
   let meta =
-    B0_meta.(empty |> tag test |>
-             add B0_unit.Action.exec_cwd B0_unit.Action.scope_cwd)
+    B0_meta.empty
+    |> B0_meta.(tag test)
+    |> B0_meta.add B0_unit.Action.cwd `Scope_dir
   in
-  let doc = "Prints OTF tables in human readable format." in
-  B0_ocaml.exe "otftrip" ~doc ~meta ~srcs ~requires
+  B0_ocaml.exe "otftrip" ~public:true ~doc ~meta ~srcs ~requires
 
 let example =
   let srcs = [test_src "examples.ml"] in
@@ -40,29 +40,29 @@ let example =
 
 let default =
   let meta =
-    let open B0_meta in
-    empty
-    |> add authors ["The otfm programmers"]
-    |> add maintainers ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
-    |> add homepage "https://erratique.ch/software/otfm"
-    |> add online_doc "https://erratique.ch/software/otfm/doc"
-    |> add licenses ["ISC"]
-    |> add repo "git+https://erratique.ch/repos/otfm.git"
-    |> add issues "https://github.com/dbuenzli/otfm/issues"
-    |> add description_tags ["OpenType"; "ttf"; "font"; "decoder"; "graphics";
-                             "org:erratique"; ]
-    |> add B0_opam.Meta.build
+    B0_meta.empty
+    |> B0_meta.(add authors) ["The otfm programmers"]
+    |> B0_meta.(add maintainers)
+      ["Daniel Bünzli <daniel.buenzl i@erratique.ch>"]
+    |> B0_meta.(add homepage) "https://erratique.ch/software/otfm"
+    |> B0_meta.(add online_doc) "https://erratique.ch/software/otfm/doc"
+    |> B0_meta.(add licenses) ["ISC"]
+    |> B0_meta.(add repo) "git+https://erratique.ch/repos/otfm.git"
+    |> B0_meta.(add issues) "https://github.com/dbuenzli/otfm/issues"
+    |> B0_meta.(add description_tags)
+      ["OpenType"; "ttf"; "font"; "decoder"; "graphics"; "org:erratique"; ]
+    |> B0_meta.tag B0_opam.tag
+    |> B0_meta.add B0_opam.build
       {|[["ocaml" "pkg/pkg.ml" "build" "--dev-pkg" "%{dev}%"]]|}
-    |> tag B0_opam.tag
-    |> add B0_opam.Meta.depends
+    |> B0_meta.add B0_opam.depends
       [ "ocaml", {|>= "4.08.0"|};
         "ocamlfind", {|build|};
         "ocamlbuild", {|build|};
         "topkg", {|build & >= "1.0.3"|};
         "uutf", {|>= "1.0.0"|};
       ]
-    |> add B0_opam.Meta.depopts [ "cmdliner", ""]
-    |> add B0_opam.Meta.conflicts [ "cmdliner", {|< "1.1.0"|} ]
+    |> B0_meta.add B0_opam.depopts [ "cmdliner", ""]
+    |> B0_meta.add B0_opam.conflicts [ "cmdliner", {|< "1.1.0"|} ]
   in
-  B0_pack.v "default" ~doc:"otfm package" ~meta ~locked:true @@
+  B0_pack.make "default" ~doc:"otfm package" ~meta ~locked:true @@
   B0_unit.list ()
