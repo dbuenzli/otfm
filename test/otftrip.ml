@@ -613,7 +613,6 @@ let gid =
   Arg.(required & pos 0 (some gid_spec_conv) None & info [] ~doc ~docv)
 
 (* Commands and sub commands *)
-
 let cmap_dump_cmd =
   let doc = "Dump the cmap table" in
   let man =
