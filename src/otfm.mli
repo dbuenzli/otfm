@@ -221,9 +221,11 @@ type error =
 [ `Invalid_cp of int
 | `Invalid_cp_range of int * int
 | `Invalid_offset of error_ctx * int
+| `Invalid_operand of error_ctx * string
 | `Invalid_postscript_name of string
 | `Missing_required_table of tag
 | `Unexpected_eoi of error_ctx
+| `Unexpected_reserved_operator of int
 | `Unknown_composite_format of error_ctx * int
 | `Unknown_flavour of tag
 | `Unknown_loca_format of error_ctx * int
@@ -294,14 +296,40 @@ val table_raw : decoder -> tag -> (string option, error) result
 
 (** {2:cff CFF table} *)
 
-val cff : decoder -> (string, error) result
+module Cff : sig
+  type number =
+    | Int of int
+    | Fixed of (int32 * int32)
+    | Decimal of float
 
-(*
-val cff_charstring : decoder -> glyph_id -> (glyf_loc option, error) result
-(** [loca d gid] looks up the location of the glyph with id [gid] by
-    reading the {{:http://www.microsoft.com/typography/otspec/loca.htm}loca}
-    table. The result can be used with {!val:glyf} to lookup the glyph. *)
-*)
+  module Charstring : sig
+    type op =
+      | Hstem | Vstem | Vmoveto | Rlineto | Hlineto | Vlineto | Rrcurveto
+      | Callsubr | Return | Endchar | Hstemhm
+      | Hintmask of string | Cntrmask of string
+      | Rmoveto | Hmoveto | Vstemhm | Rcurveline | Rlinecurve | Vvcurveto
+      | Hhcurveto | Shortint | Callgsubr | Vhcurveto | Hvcurveto | And | Or
+      | Not | Abs | Add | Sub | Div | Neg | Eq | Drop | Put | Get | Ifelse
+      | Random | Mul | Sqrt | Dup | Exch | Index | Roll | Hflex | Flex | Hflex1
+      | Flex1
+
+    val pp_op : Format.formatter -> op -> unit
+
+    type elt = Num of number | Op of op
+  end
+end
+
+type 'acc charstring_decoder =
+  ('acc -> Cff.Charstring.elt -> 'acc)
+  -> ('acc -> int)
+  -> 'acc
+  -> ('acc, error) result
+
+val cff_charstring : decoder -> glyph_id ->
+  ('a charstring_decoder option, error) result
+
+val cff_gsubr : decoder -> int -> ('a charstring_decoder option, error) result
+val cff_lsubr : decoder -> int -> ('a charstring_decoder option, error) result
 
 (** {2:cmap cmap table} *)
 
