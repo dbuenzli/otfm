@@ -231,6 +231,7 @@ type error =
 | `Unknown_loca_format of error_ctx * int
 | `Unknown_version of error_ctx * int32
 | `Unsupported_TTC
+| `Unsupported_CFF_operator of string
 | `Unsupported_cmaps of (platform_id * encoding_id * format_id) list
 | `Unsupported_glyf_matching_points ]
 (** The type for decoding errors.

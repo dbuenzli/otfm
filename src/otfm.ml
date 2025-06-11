@@ -142,6 +142,7 @@ type error =
 | `Unknown_loca_format of error_ctx * int
 | `Unknown_version of error_ctx * int32
 | `Unsupported_TTC
+| `Unsupported_CFF_operator of string
 | `Unsupported_cmaps of (int * int * int) list
 | `Unsupported_glyf_matching_points ]
 
@@ -168,6 +169,8 @@ let pp_error ppf = function
     pp ppf "@[Missing@ required@ table (%a)@]" Tag.pp tag
 | `Unsupported_TTC ->
     pp ppf "@[True@ Type@ collections (TTC)@ are@ not@ supported@]"
+| `Unsupported_CFF_operator name ->
+    pp ppf "@[Unsupported@ CFF @operator@ %S@]" name
 | `Unsupported_cmaps maps ->
     let pp_sep ppf () = pp ppf ",@ " in
     let pp_map ppf (pid, eid, fmt) = pp ppf "(%d,%d,%d)" pid eid fmt in
@@ -544,10 +547,11 @@ module Cff = struct
     else
       Ok b0
 
-  type dict_field = Required of int | Optional | Array
+  type dict_field = Required of int | Optional | Array | Not_supported of string
   type dict_spec = (int * string * dict_field) list
 
   let get_dict_field field_name stack = function
+  | Not_supported s -> Error (`Unsupported_CFF_operator s)
   | Array -> Ok ([], stack)
   | Optional ->
       Ok (match stack with
@@ -885,8 +889,7 @@ module Cff = struct
       d_dict [
         0x13, local_subrs_key, Required 1;
         0x16, "vsindex", Optional;
-        0x17, "blend", Array (* FIXME: supposed to pop a specific number of
-                                 values and then push a related number of values back. *);
+        0x17, "blend", Not_supported "blend";
         0x06, "BlueValues", Array;
         0x07, "OtherBlues", Array;
         0x08, "FamilyBlues", Array;
