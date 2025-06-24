@@ -295,7 +295,21 @@ val table_raw : decoder -> tag -> (string option, error) result
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
-(** {2:cff CFF table} *)
+(** {2:cff CFF table}
+
+    Both CFF version
+    {{:https://adobe-type-tools.github.io/font-tech-notes/pdfs/5176.CFF.pdf}1}
+    and {{:https://learn.microsoft.com/en-us/typography/opentype/spec/cff2}2}
+    are supported.
+
+    {b Limitations.} In v1 only the first topdict is accessed. In v2 only the
+    first fontdict (and related private dict) is accessed.
+
+    The
+    {{:https://learn.microsoft.com/en-us/typography/opentype/spec/cff2#opentype-font-variations-in-cff2}[blend]}
+    operator is not supported: the decoder will bail out with the
+    [`Unsupported_CFF_operator] error if it is encountered.
+*)
 
 module Cff : sig
   type number =
@@ -304,6 +318,10 @@ module Cff : sig
     | Decimal of float
 
   module Charstring : sig
+    (** Cf.
+        {{:https://adobe-type-tools.github.io/font-tech-notes/pdfs/5177.Type2.pdf}the
+        Type 2 Charstring Format}. *)
+
     type op =
       | Hstem | Vstem | Vmoveto | Rlineto | Hlineto | Vlineto | Rrcurveto
       | Callsubr | Return | Endchar | Hstemhm
@@ -325,12 +343,30 @@ type 'acc charstring_decoder =
   -> ('acc -> int)
   -> 'acc
   -> ('acc, error) result
+(** Due to hint and cntr masks, correctly decoding charstrings requires
+    evaluating them: to know the size of the bitvector following the masking
+    operator, one needs to count the number of hints encountered (in the
+    charstring itself, as well as in the subroutines that might be called
+    during its evaluation) before encoutering the masking operator.
+
+    The various functions for accessing charstrings below return (upon success)
+    a [charstring_decoder]: a sort of stateful folder over charstring elements,
+    whose state can be queried by the decoder to know the number of hints
+    encountered at any given point.
+*)
 
 val cff_charstring : decoder -> glyph_id ->
   ('a charstring_decoder option, error) result
+(** Returns a {!charstring_decoder} for the given glyph in the CFF table. *)
 
 val cff_gsubr : decoder -> int -> ('a charstring_decoder option, error) result
+(** [cff_gsubr dec idx] returns a {!charstring_decoder} for the global subroutine
+    at index [idx].
+
+    The bias is computed and applied by [cff_gsubr]. *)
+
 val cff_lsubr : decoder -> int -> ('a charstring_decoder option, error) result
+(** Like {!cff_gsubr} but for local subroutines. *)
 
 (** {2:cmap cmap table} *)
 
