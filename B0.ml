@@ -10,13 +10,13 @@ let otfm = B0_ocaml.libname "otfm"
 (* Libraries *)
 
 let otfm_lib =
-  let srcs = Fpath.[ `Dir (v "src") ] in
+  let srcs = Filepath.[ `Dir (v "src") ] in
   let requires = [uutf] in
   B0_ocaml.lib otfm ~doc:"Otfm library" ~srcs ~requires
 
 (* Tests *)
 
-let test_src f = `File (Fpath.v (Fmt.str "test/%s" f))
+let test_src f = `File (Filepath.v (Fmt.str "test/%s" f))
 
 let otftrip =
   let doc = "Prints OTF tables in human readable format." in
