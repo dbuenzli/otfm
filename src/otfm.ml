@@ -524,7 +524,7 @@ let rec d_cmap_records d count acc =
 
 let select_cmap cmaps =
   let rec loop f sel = function
-  | (_, _, _, (4 | 12 | 13 as f') as c) :: cs when f' > f -> loop f (Some c) cs
+  | (_, _, _, (4 | 12 | 13 as f') as c) :: cs when f' > f -> loop f' (Some c) cs
   | [] -> sel
   | _ :: cs -> loop f sel cs
   in
