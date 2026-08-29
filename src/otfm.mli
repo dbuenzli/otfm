@@ -221,14 +221,17 @@ type error =
 [ `Invalid_cp of int
 | `Invalid_cp_range of int * int
 | `Invalid_offset of error_ctx * int
+| `Invalid_operand of error_ctx * string
 | `Invalid_postscript_name of string
 | `Missing_required_table of tag
 | `Unexpected_eoi of error_ctx
+| `Unexpected_reserved_operator of int
 | `Unknown_composite_format of error_ctx * int
 | `Unknown_flavour of tag
 | `Unknown_loca_format of error_ctx * int
 | `Unknown_version of error_ctx * int32
 | `Unsupported_TTC
+| `Unsupported_CFF_operator of string
 | `Unsupported_cmaps of (platform_id * encoding_id * format_id) list
 | `Unsupported_glyf_matching_points ]
 (** The type for decoding errors.
@@ -292,16 +295,78 @@ val table_raw : decoder -> tag -> (string option, error) result
 (** [table_raw d t] is the (unpadded) data of the table [t] as a
     string if the table [t] exists. *)
 
-(** {2:cff CFF table} *)
+(** {2:cff CFF table}
 
-val cff : decoder -> (string, error) result
+    Both CFF version
+    {{:https://adobe-type-tools.github.io/font-tech-notes/pdfs/5176.CFF.pdf}1}
+    and {{:https://learn.microsoft.com/en-us/typography/opentype/spec/cff2}2}
+    are supported.
 
-(*
-val cff_charstring : decoder -> glyph_id -> (glyf_loc option, error) result
-(** [loca d gid] looks up the location of the glyph with id [gid] by
-    reading the {{:http://www.microsoft.com/typography/otspec/loca.htm}loca}
-    table. The result can be used with {!val:glyf} to lookup the glyph. *)
+    {b Limitations.} In v1 only the first topdict is accessed. In v2 only the
+    first fontdict (and related private dict) is accessed.
+
+    The
+    {{:https://learn.microsoft.com/en-us/typography/opentype/spec/cff2#opentype-font-variations-in-cff2}[blend]}
+    operator is not supported: the decoder will bail out with the
+    [`Unsupported_CFF_operator] error if it is encountered.
 *)
+
+module Cff : sig
+  type number =
+    | Int of int
+    | Fixed of (int32 * int32)
+    | Decimal of float
+
+  module Charstring : sig
+    (** Cf.
+        {{:https://adobe-type-tools.github.io/font-tech-notes/pdfs/5177.Type2.pdf}the
+        Type 2 Charstring Format}. *)
+
+    type op =
+      | Hstem | Vstem | Vmoveto | Rlineto | Hlineto | Vlineto | Rrcurveto
+      | Callsubr | Return | Endchar | Hstemhm
+      | Hintmask of string | Cntrmask of string
+      | Rmoveto | Hmoveto | Vstemhm | Rcurveline | Rlinecurve | Vvcurveto
+      | Hhcurveto | Shortint | Callgsubr | Vhcurveto | Hvcurveto | And | Or
+      | Not | Abs | Add | Sub | Div | Neg | Eq | Drop | Put | Get | Ifelse
+      | Random | Mul | Sqrt | Dup | Exch | Index | Roll | Hflex | Flex | Hflex1
+      | Flex1
+
+    val pp_op : Format.formatter -> op -> unit
+
+    type elt = Num of number | Op of op
+  end
+end
+
+type 'acc charstring_decoder =
+  ('acc -> Cff.Charstring.elt -> 'acc)
+  -> ('acc -> int)
+  -> 'acc
+  -> ('acc, error) result
+(** Due to hint and cntr masks, correctly decoding charstrings requires
+    evaluating them: to know the size of the bitvector following the masking
+    operator, one needs to count the number of hints encountered (in the
+    charstring itself, as well as in the subroutines that might be called
+    during its evaluation) before encoutering the masking operator.
+
+    The various functions for accessing charstrings below return (upon success)
+    a [charstring_decoder]: a sort of stateful folder over charstring elements,
+    whose state can be queried by the decoder to know the number of hints
+    encountered at any given point.
+*)
+
+val cff_charstring : decoder -> glyph_id ->
+  ('a charstring_decoder option, error) result
+(** Returns a {!charstring_decoder} for the given glyph in the CFF table. *)
+
+val cff_gsubr : decoder -> int -> ('a charstring_decoder option, error) result
+(** [cff_gsubr dec idx] returns a {!charstring_decoder} for the global subroutine
+    at index [idx].
+
+    The bias is computed and applied by [cff_gsubr]. *)
+
+val cff_lsubr : decoder -> int -> ('a charstring_decoder option, error) result
+(** Like {!cff_gsubr} but for local subroutines. *)
 
 (** {2:cmap cmap table} *)
 

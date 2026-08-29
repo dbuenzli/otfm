@@ -132,14 +132,17 @@ type error =
 [ `Invalid_cp of int
 | `Invalid_cp_range of int * int
 | `Invalid_offset of error_ctx * int
+| `Invalid_operand of error_ctx * string
 | `Invalid_postscript_name of string
 | `Missing_required_table of tag
 | `Unexpected_eoi of error_ctx
+| `Unexpected_reserved_operator of int
 | `Unknown_composite_format of error_ctx * int
 | `Unknown_flavour of tag
 | `Unknown_loca_format of error_ctx * int
 | `Unknown_version of error_ctx * int32
 | `Unsupported_TTC
+| `Unsupported_CFF_operator of string
 | `Unsupported_cmaps of (int * int * int) list
 | `Unsupported_glyf_matching_points ]
 
@@ -156,6 +159,8 @@ let pp_error ppf = function
     pp ppf "@[Invalid@ Unicode@ code@ point@ range (%a, %a)@]" pp_cp u0 pp_cp u1
 | `Invalid_offset (ctx, o) ->
     pp ppf "@[Invalid@ offset (%d)@ in@ %a@]" o pp_ctx ctx
+| `Invalid_operand (ctx, operator) ->
+    pp ppf "@[Invalid@ operand@ for@ %S@ in@ %a]" operator pp_ctx ctx
 | `Invalid_postscript_name n ->
     pp ppf "@[Invalid@ PostScript@ name (%S)@]" n
 | `Unknown_flavour tag ->
@@ -164,6 +169,8 @@ let pp_error ppf = function
     pp ppf "@[Missing@ required@ table (%a)@]" Tag.pp tag
 | `Unsupported_TTC ->
     pp ppf "@[True@ Type@ collections (TTC)@ are@ not@ supported@]"
+| `Unsupported_CFF_operator name ->
+    pp ppf "@[Unsupported@ CFF @operator@ %S@]" name
 | `Unsupported_cmaps maps ->
     let pp_sep ppf () = pp ppf ",@ " in
     let pp_map ppf (pid, eid, fmt) = pp ppf "(%d,%d,%d)" pid eid fmt in
@@ -178,6 +185,8 @@ let pp_error ppf = function
     pp ppf "@[Unknown@ composite glyph format (%d)@ in@ %a@]" v pp_ctx ctx
 | `Unexpected_eoi ctx ->
     pp ppf "@[Unexpected@ end@ of@ input@ in %a@]" pp_ctx ctx
+| `Unexpected_reserved_operator op ->
+    pp ppf "@[Unexpected@ reserved@ operator@ 0x%x@ in charstring@]" op
 
 let error_to_string e = Format.asprintf "%a" pp_error e
 
@@ -193,6 +202,12 @@ type src = [ `String of string ]
 (* TODO maybe it would be better not to maintain t_pos/i_pos,
    but rather pass them as arguments to decoding functions. *)
 
+type cff_state = (* for `CFF fonts, lazy init. *)
+  { mutable major_version : int;
+    mutable charstring_index : int;
+    mutable gsubrs_index : int;
+    mutable lsubrs_index: int; }
+
 type decoder =
   { mutable in_collection : bool; (* [true] if in collection. *)
     mutable i : string; (* input data. *)
@@ -206,7 +221,7 @@ type decoder =
     mutable loca_pos : int; (* for `TTF fonts, lazy init. *)
     mutable loca_format : int; (* for `TTF fonts, lazy init. *)
     mutable glyf_pos : int; (* for `TTF fonts, lazy init. *)
-    mutable cff_charstring_index : int; (* for `CFF fonts, lazy init. *)
+    cff_state : cff_state;
     mutable buf : Buffer.t; (* internal buffer. *) }
 
 let decoder_src d = (`String d.i)
@@ -216,7 +231,9 @@ let decoder src =
   in
   { in_collection = false; i; i_pos; i_max; t_pos = 0;
     state = `Start; ctx = `Offset_table; flavour = `TTF; tables = [];
-    loca_pos = -1; loca_format = -1; glyf_pos = -1; cff_charstring_index = -1;
+    loca_pos = -1; loca_format = -1; glyf_pos = -1;
+    cff_state = { charstring_index = -1; major_version = -1;
+                  gsubrs_index = -1; lsubrs_index = -1 };
     buf = Buffer.create 253; }
 
 let ( >>= ) = Result.bind
@@ -424,15 +441,592 @@ let glyph_count d =
 
 (* CFF table *)
 
-let init_cff d =
-  let* () = seek_required_table Tag.cff d () in
-  let* version = d_uint16 d in
-  Ok ()
+module Cff = struct
+  type number =
+    | Int of int
+    | Fixed of (int32 * int32)
+    | Decimal of float
 
-let cff d =
+  let int i = Ok (Int i)
+
+  let read_decimal d =
+    let interp = function
+    | 0xf -> false
+    | 0xe -> Buffer.add_char d.buf '-'; true
+    | 0xd -> assert false (* "reserved" *)
+    | 0xc -> Buffer.add_string d.buf "E-"; true
+    | 0xb -> Buffer.add_string d.buf "E"; true
+    | 0xa -> Buffer.add_char d.buf '.'; true
+    | i -> Buffer.add_char d.buf Char.(chr (i + code '0')); true
+    in
+    while
+      let b = raw_byte d in
+      let _ = interp (b lsr 4) in
+      interp (b land 0xf)
+    do () done;
+    let s = Buffer.contents d.buf in
+    Buffer.clear d.buf;
+    match s with
+    | "" | "." -> 0.
+    | str -> float_of_string str
+
+  let is_simple_num b0 = 32 <= b0 && b0 <= 255
+
+  (* Shared part between CFF and Charstring number encoding *)
+  let d_simple_num d b0 =
+    if b0 <= 246 then
+      int (b0 - 139)
+    else if b0 <= 250 then
+      let* b1 = d_uint8 d in
+      int ((b0 - 247) * 256 + b1 + 108)
+    else if b0 <= 254 then
+      let* b1 = d_uint8 d in
+      int (~-(b0 - 251) * 256 - b1 - 108)
+    else (
+      (* But allowed in charstrings... *)
+(*       assert (d.cff_state.major_version = 2); (* Didn't exist in V1 *) *)
+      let* fixed = d_fixed d in
+      Ok (Fixed fixed)
+    )
+
+  let d_num d b0 : (number, _) result =
+    if is_simple_num b0 then
+      d_simple_num d b0
+    else if b0 = 28 then
+      let* b12 = d_uint16 d in
+      int b12
+    else if b0 = 29 then
+      let* b14 = d_uint32_int d in
+      int b14
+    else if b0 = 30 then
+      let f = read_decimal d in
+      Ok (Decimal f)
+    else
+      Error `Not_a_number
+
+  let d_offset_of_size d = function
+  | 1 -> Ok d_uint8
+  | 2 -> Ok d_uint16
+  | 3 -> Ok d_uint24
+  | 4 -> Ok d_uint32_int
+  | _ -> Error (`Invalid_offset (d.ctx, d.i_pos))
+
+  module Index = struct
+    let d_length d =
+      if d.cff_state.major_version = 1 then d_uint16 d else d_uint32_int d
+
+    let d_header_and_access d count idx =
+      let* elt_sz = d_uint8 d in
+      let* d_offset = d_offset_of_size d elt_sz in
+      let* () = d_skip (idx * elt_sz) d in
+      let* offset = d_offset d in
+      let* next = d_offset d in
+      let len = next - offset in
+      let* () = d_skip ((count - idx - 1) * elt_sz) d in (* go to data section start *)
+      Ok (Some (offset - 1, len))
+  end
+
+  let d_index_offset d idx =
+    let* len = Index.d_length d in
+    if len = 0 then Ok None else
+    Index.d_header_and_access d len idx
+
+  let skip_index d =
+    let* count = Index.d_length d in
+    if count = 0 then Ok () else
+    let* elt_sz = d_uint8 d in
+    let* d_offset = d_offset_of_size d elt_sz in
+    let* () = d_skip (elt_sz * count) d in
+    let* last_off = d_offset d in
+    d_skip (last_off - 1) d
+
+  let d_operator d b0 =
+    if b0 = 0x0c then
+      let* b1 = d_uint8 d in
+      Ok ((b0 lsl 8) lor b1)
+    else
+      Ok b0
+
+  type dict_field = Required of int | Optional | Array | Not_supported of string
+  type dict_spec = (int * string * dict_field) list
+
+  let get_dict_field field_name stack = function
+  | Not_supported s -> Error (`Unsupported_CFF_operator s)
+  | Array -> Ok ([], stack)
+  | Optional ->
+      Ok (match stack with
+        | [] -> [], []
+        | x :: xs -> xs, [x]
+        )
+  | Required n ->
+      let rec take src acc n =
+        if n = 0 then Ok (src, List.rev acc) else
+        match src with
+        | [] -> Error (`Invalid_operand (`Table Tag.cff, field_name))
+        | x :: xs -> take xs (x :: acc) (n - 1)
+      in
+      take stack [] n
+
+  let d_dict (spec : dict_spec) d end_pos =
+    let res = Hashtbl.create 0 in
+    let rec loop stack =
+      if d.i_pos = end_pos then Ok res else
+      let* b0 = d_uint8 d in
+      match d_num d b0 with
+      | Ok num -> loop (num :: stack)
+      | Error `Not_a_number ->
+          let* op = d_operator d b0 in
+          begin match List.find_opt (fun (i,_,_) -> i = op) spec with
+          | Some (_, name, field_spec)->
+              let* (stack, value) = get_dict_field name stack field_spec in
+              Hashtbl.add res name value;
+              loop stack
+          | None -> Error (`Invalid_offset (d.ctx, d.i_pos))
+          end
+      | Error (`Unexpected_eoi _) as e -> e
+    in
+    loop []
+
+  module Charstring = struct
+    (* ref: https://adobe-type-tools.github.io/font-tech-notes/pdfs/5177.Type2.pdf *)
+
+    type op =
+    | Hstem
+    | Vstem
+    | Vmoveto
+    | Rlineto
+    | Hlineto
+    | Vlineto
+    | Rrcurveto
+    | Callsubr
+    | Return
+    | Endchar
+    | Hstemhm
+    | Hintmask of string
+    | Cntrmask of string
+    | Rmoveto
+    | Hmoveto
+    | Vstemhm
+    | Rcurveline
+    | Rlinecurve
+    | Vvcurveto
+    | Hhcurveto
+    | Shortint
+    | Callgsubr
+    | Vhcurveto
+    | Hvcurveto
+    | And
+    | Or
+    | Not
+    | Abs
+    | Add
+    | Sub
+    | Div
+    | Neg
+    | Eq
+    | Drop
+    | Put
+    | Get
+    | Ifelse
+    | Random
+    | Mul
+    | Sqrt
+    | Dup
+    | Exch
+    | Index
+    | Roll
+    | Hflex
+    | Flex
+    | Hflex1
+    | Flex1
+
+    let pp_op ppf op =
+      Format.pp_print_string ppf (
+        match op with
+        | Hstem -> "Hstem"
+        | Vstem -> "Vstem"
+        | Vmoveto -> "Vmoveto"
+        | Rlineto -> "Rlineto"
+        | Hlineto -> "Hlineto"
+        | Vlineto -> "Vlineto"
+        | Rrcurveto -> "Rrcurveto"
+        | Callsubr -> "Callsubr"
+        | Return -> "Return"
+        | Endchar -> "Endchar"
+        | Hstemhm -> "Hstemhm"
+        | Hintmask _ -> "Hintmask ..."
+        | Cntrmask _ -> "Cntrmask ..."
+        | Rmoveto -> "Rmoveto"
+        | Hmoveto -> "Hmoveto"
+        | Vstemhm -> "Vstemhm"
+        | Rcurveline -> "Rcurveline"
+        | Rlinecurve -> "Rlinecurve"
+        | Vvcurveto -> "Vvcurveto"
+        | Hhcurveto -> "Hhcurveto"
+        | Shortint -> "Shortint"
+        | Callgsubr -> "Callgsubr"
+        | Vhcurveto -> "Vhcurveto"
+        | Hvcurveto -> "Hvcurveto"
+        | And -> "And"
+        | Or -> "Or"
+        | Not -> "Not"
+        | Abs -> "Abs"
+        | Add -> "Add"
+        | Sub -> "Sub"
+        | Div -> "Div"
+        | Neg -> "Neg"
+        | Eq -> "Eq"
+        | Drop -> "Drop"
+        | Put -> "Put"
+        | Get -> "Get"
+        | Ifelse -> "Ifelse"
+        | Random -> "Random"
+        | Mul -> "Mul"
+        | Sqrt -> "Sqrt"
+        | Dup -> "Dup"
+        | Exch -> "Exch"
+        | Index -> "Index"
+        | Roll -> "Roll"
+        | Hflex -> "Hflex"
+        | Flex -> "Flex"
+        | Hflex1 -> "Hflex1"
+        | Flex1 -> "Flex1"
+      )
+
+    let d_op d nb_hints b0 =
+      let gather_mask () =
+        let nb_bytes = (nb_hints + 7) / 8 in
+        d_bytes nb_bytes d
+      in
+      match b0 with
+      | 0x00 | 0x02 | 0x09 | 0x0d | 0x0f | 0x10 | 0x11 ->
+          Error (`Unexpected_reserved_operator b0)
+      | 0x01 -> Ok Hstem
+      | 0x03 -> Ok Vstem
+      | 0x04 -> Ok Vmoveto
+      | 0x05 -> Ok Rlineto
+      | 0x06 -> Ok Hlineto
+      | 0x07 -> Ok Vlineto
+      | 0x08 -> Ok Rrcurveto
+      | 0x0a -> Ok Callsubr
+      | 0x0b -> Ok Return
+      | 0x0e -> Ok Endchar
+      | 0x12 -> Ok Hstemhm
+      | 0x13 ->
+        let* masks = gather_mask () in
+        Ok (Hintmask masks)
+      | 0x14 -> 
+        let* masks = gather_mask () in
+        Ok (Cntrmask masks)
+      | 0x15 -> Ok Rmoveto
+      | 0x16 -> Ok Hmoveto
+      | 0x17 -> Ok Vstemhm
+      | 0x18 -> Ok Rcurveline
+      | 0x19 -> Ok Rlinecurve
+      | 0x1a -> Ok Vvcurveto
+      | 0x1b -> Ok Hhcurveto
+      | 0x1c -> Ok Shortint
+      | 0x1d -> Ok Callgsubr
+      | 0x1e -> Ok Vhcurveto
+      | 0x1f -> Ok Hvcurveto
+      | 0x0c ->
+          let* b1 = d_uint8 d in
+          begin match b1 with
+          | 0x03 -> Ok And
+          | 0x04 -> Ok Or
+          | 0x05 -> Ok Not
+          | 0x09 -> Ok Abs
+          | 0x0a -> Ok Add
+          | 0x0b -> Ok Sub
+          | 0x0c -> Ok Div
+          | 0x0e -> Ok Neg
+          | 0x0f -> Ok Eq
+          | 0x12 -> Ok Drop
+          | 0x14 -> Ok Put
+          | 0x15 -> Ok Get
+          | 0x16 -> Ok Ifelse
+          | 0x17 -> Ok Random
+          | 0x18 -> Ok Mul
+          | 0x1a -> Ok Sqrt
+          | 0x1b -> Ok Dup
+          | 0x1c -> Ok Exch
+          | 0x1d -> Ok Index
+          | 0x1e -> Ok Roll
+          | 0x22 -> Ok Hflex
+          | 0x23 -> Ok Flex
+          | 0x24 -> Ok Hflex1
+          | 0x25 -> Ok Flex1
+          | _ ->
+              Error (`Unexpected_reserved_operator ((b0 lsl 2) lor b1))
+          end
+      | _ -> Error (`Invalid_offset (d.ctx, d.i_pos))
+
+    type elt = Num of number | Op of op
+
+    let d_num d b0 =
+      if is_simple_num b0 then
+        d_simple_num d b0
+      else
+        Error `Not_a_number
+
+    let decode d len f nb_hints init_state =
+      let start_pos = d.i_pos in
+      let d =
+        (* copy for reentrance *)
+        { d with i_pos = start_pos }
+      in
+      let rec loop state =
+        if d.i_pos - start_pos = len then Ok state else
+        let* b0 = d_uint8 d in
+        match d_num d b0 with
+        | Ok num -> loop (f state (Num num))
+        | Error `Not_a_number ->
+            let* op = d_op d (nb_hints state) b0 in
+            loop (f state (Op op))
+        | Error (`Unexpected_eoi _) as e -> e
+      in
+      loop init_state
+  end
+
+  let charstring_index_key = "CharStringsINDEX"
+  let local_subrs_key = "LocalSubrsINDEX"
+  let private_dict_key = "PrivateDICT"
+
+  module V1 = struct
+    let d_topdict =
+      (* ref: https://adobe-type-tools.github.io/font-tech-notes/pdfs/5176.CFF.pdf *)
+      d_dict [
+        0, "version", Required 1;
+        1, "Notice", Required 1;
+        0x0c00, "Copyright", Required 1;
+        2, "FullName", Required 1;
+        3, "FamilyName", Required 1;
+        4, "Weight", Required 1;
+        0x0c01, "isFixedPitch", Optional;
+        0x0c02, "ItalicAngle", Optional;
+        0x0c03, "UnderlinePosition", Optional;
+        0x0c04, "UnderlineThickness", Optional;
+        0x0c04, "PaintType", Optional;
+        0x0c05, "CharstringType", Optional;
+        0x0c07, "FontMatrix", Array;
+        13, "UniqueID", Required 1;
+        5, "FontBBox", Array;
+        0x0c08, "StrokeWidth", Optional;
+        14, "XUID", Array;
+        15, "charset", Optional;
+        16, "Encoding", Optional;
+        17, charstring_index_key, Required 1;
+        18, private_dict_key, Required 2;
+        0x0c14, "SyntheticBase", Required 1;
+        0x0c15, "PostScript", Required 1;
+        0x0c16, "BaseFontName", Required 1;
+        0x0c17, "BaseFontBlend", Required 1;
+        (* CIDFont Extensions *)
+        0x0c1e, "ROS", Required 3;
+        0x0c1f, "CIDFontVersion", Optional;
+        0x0c20, "CIDFontRevision", Optional;
+        0x0c21, "CIDFontType", Optional;
+        0x0c22, "CIDCount", Optional;
+        0x0c23, "UIDBase", Required 1;
+        0x0c24, "FDArray", Required 1;
+        0x0c25, "FDSelect", Required 1;
+        0x0c26, "FontName", Required 1;
+      ]
+
+    let d_privatedict =
+      d_dict [
+        0x06, "BlueValues", Array;
+        0x07, "OtherBlues", Array;
+        0x08, "FamilyBlues", Array;
+        0x09, "FamilyOtherBlues", Array;
+        0x0c09, "BlueScale", Optional;
+        0x0c0a, "BlueShift", Optional;
+        0x0c0b, "BlueFuzz", Optional;
+        0x0a, "StdHW", Required 1;
+        0x0b, "StdVW", Required 1;
+        0x0c0c, "StemSnapH", Array;
+        0x0c0d, "StemSnapV", Array;
+        0x0c0e, "ForceBold", Optional;
+        0x0c11, "LanguageGroup", Optional;
+        0x0c12, "ExpansionFactor", Optional;
+        0x0c13, "intialRandomSeed", Optional;
+        0x13, local_subrs_key, Required 1;
+        0x14, "defaultWidthX", Optional;
+        0x15, "nominalWidthX", Optional;
+      ]
+
+    let init_lsubrs_index_offset d topdict =
+      match Hashtbl.find_opt topdict private_dict_key with
+      | Some [ Int pos; Int sz ] ->
+          let* () = seek_table_pos pos d in
+          let priv_pos = d.i_pos in
+          let* private_dict = d_privatedict d (priv_pos + sz) in
+          begin match Hashtbl.find_opt private_dict local_subrs_key with
+          | Some [ Int lsubrs_index_offset ] ->
+              Ok (d.cff_state.lsubrs_index <- priv_pos + lsubrs_index_offset)
+          | _ -> Error (`Invalid_operand (`Table Tag.cff, local_subrs_key))
+          end
+      | _ -> Error (`Invalid_operand (`Table Tag.cff, private_dict_key))
+  end
+
+  module V2 = struct
+    let font_dict_index_key = "FontDICTINDEX"
+
+    let d_topdict =
+      (* ref: https://learn.microsoft.com/en-us/typography/opentype/spec/cff2#topdict-operator-summary *)
+      d_dict [
+        0x11, charstring_index_key, Required 1;
+        0x18, "VariationStore", Required 1;
+        0x0c24, font_dict_index_key, Required 1;
+        0x0c25, "FontDICTSelect", Optional;
+        0x0c07, "FontMatrix", Array; (* in practice only 6 elts, but... *)
+      ]
+
+    let d_fontdict =
+      d_dict [ 0x12, private_dict_key, Required 2 ]
+
+    let d_privatedict =
+      d_dict [
+        0x13, local_subrs_key, Required 1;
+        0x16, "vsindex", Optional;
+        0x17, "blend", Not_supported "blend";
+        0x06, "BlueValues", Array;
+        0x07, "OtherBlues", Array;
+        0x08, "FamilyBlues", Array;
+        0x09, "FamilyOtherBlues", Array;
+        0x0c09, "BlueScale", Optional;
+        0x0c0a, "BlueShift", Optional;
+        0x0c0b, "BlueFuzz", Optional;
+        0x0a, "StdHW", Required 1;
+        0x0b, "StdVW", Required 1;
+        0x0c0c, "StemSnapH", Array;
+        0x0c0d, "StemSnapV", Array;
+        0x0c11, "LanguageGroup", Optional;
+        0x0c12, "ExpansionFactor", Optional;
+      ]
+
+    let init_lsubrs_index_offset d topdict =
+      let fetch dict key =
+        let get_num = function | Int i -> i | _ -> assert false in
+        match Hashtbl.find_opt dict key with
+        | Some l -> Ok (List.map get_num l)
+        | _ -> Error (`Invalid_operand (`Table Tag.cff, key))
+      in
+      let* pos_l = fetch topdict font_dict_index_key in
+      let pos = List.hd pos_l in
+      let* () = seek_table_pos pos d in
+      let* ol_opt = d_index_offset d 0 in
+      let (fdict_off, fdict_len) = Option.get ol_opt in
+      let* () = d_skip fdict_off d in
+      let fdict_end = d.i_pos + fdict_len in
+      let* font_dict = d_fontdict d fdict_end in
+      let* pdict_ol = fetch font_dict private_dict_key in
+      match pdict_ol with
+      | [ pdict_sz; pdict_off ] ->
+          let* () = seek_table_pos pdict_off d in
+          let priv_pos = d.i_pos in
+          let* private_dict = d_privatedict d (priv_pos + pdict_sz) in
+          begin match Hashtbl.find_opt private_dict local_subrs_key with
+          | Some [ Int lsubrs_index_offset ] ->
+              Ok (d.cff_state.lsubrs_index <- priv_pos + lsubrs_index_offset)
+          | _ -> Error (`Invalid_operand (`Table Tag.cff, local_subrs_key))
+          end
+      | _ -> Error (`Invalid_operand (`Table Tag.cff, private_dict_key))
+  end
+
+  let init d =
+    if d.cff_state.charstring_index <> -1 then Ok () else
+    let* () = seek_required_table Tag.cff d () in
+    let* vmaj = d_uint8 d in
+    d.cff_state.major_version <- vmaj;
+    let* _vmin = d_uint8 d in
+    let* header_sz = d_uint8 d in
+    let* topdict =
+      if vmaj = 2 then
+        let* topdict_sz = d_uint16 d in
+        let* () = d_skip (header_sz - 5) d in
+        let topdict_end = d.i_pos + topdict_sz in
+        V2.d_topdict d topdict_end
+      else (
+        let* _offsize = d_uint8 d in
+        let* () = skip_index d in (* skipping Name index, TODO? *)
+        let* opt = d_index_offset d 0 in
+        let (topdict_offset, topdict_sz) = Option.get opt (* necessarily at least one font *) in
+        let* () = d_skip topdict_offset d in
+        let topdict_end = d.i_pos + topdict_sz in
+        V1.d_topdict d topdict_end
+      )
+    in
+    let* () =
+      match Hashtbl.find topdict charstring_index_key with
+      | [ Int offset ] -> Ok (d.cff_state.charstring_index <- offset)
+      | _ -> Error (`Invalid_operand (`Table Tag.cff, charstring_index_key))
+    in
+    let* () = if vmaj = 1 then skip_index d else Ok () in
+    d.cff_state.gsubrs_index <- d.i_pos;
+    if vmaj = 2 then
+      V2.init_lsubrs_index_offset d topdict
+    else (
+      V1.init_lsubrs_index_offset d topdict
+    )
+end
+
+type 'acc charstring_decoder =
+  ('acc -> Cff.Charstring.elt -> 'acc)
+  -> ('acc -> int)
+  -> 'acc
+  -> ('acc, error) result
+
+let cff_charstring d gid =
   let* () = init_decoder d in
-  let* () = init_cff d in
-  Ok ""
+  let* () = Cff.init d in
+  let* () = seek_table_pos d.cff_state.charstring_index d in
+  let* ol_opt = Cff.d_index_offset d gid in
+  match ol_opt with
+  | None -> Ok None
+  | Some (off, len) ->
+      let* () = d_skip off d in
+      let cs = Cff.Charstring.decode d len in
+      Ok (Some cs)
+
+let cff_gsubr d num =
+  let* () = init_decoder d in
+  let* () = Cff.init d in
+  let* () = seek_pos d.cff_state.gsubrs_index d in
+  let open Cff in
+  let* subroutines_count = Index.d_length d in
+  let bias =
+    if subroutines_count < 1240 then 107
+    else if subroutines_count < 33900 then 1131
+    else 32768
+  in
+  let* ol_opt = Index.d_header_and_access d subroutines_count (num + bias) in
+  match ol_opt with
+  | None -> Ok None
+  | Some (off, len) ->
+      let* () = d_skip off d in
+      let cs = Charstring.decode d len in
+      Ok (Some cs)
+
+let cff_lsubr d num =
+  let* () = init_decoder d in
+  let* () = Cff.init d in
+  let* () = seek_pos d.cff_state.lsubrs_index d in
+  let open Cff in
+  let* subroutines_count = Index.d_length d in
+  let bias =
+    if subroutines_count < 1240 then 107
+    else if subroutines_count < 33900 then 1131
+    else 32768
+  in
+  let* ol_opt = Index.d_header_and_access d subroutines_count (num + bias) in
+  match ol_opt with
+  | None -> Ok None
+  | Some (off, len) ->
+      let* () = d_skip off d in
+      let cs = Charstring.decode d len in
+      Ok (Some cs)
+
 
 (* cmap table *)
 
